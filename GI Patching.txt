@@ -1,0 +1,169 @@
+--------------------------------------------------------- Patching GI ----------------------------------------------
+
+1. Take backup of oracle_home,grid_home and inventory
+=====================================================
+
+** AS ROOT USER **
+
+cd /u01/software
+
+mkdir patch
+mkdir oracle
+mkdir grid
+mkdir inventory
+
+Taking a Tar backup of Grid Home 
+
+	cd /u01/software/grid
+	chown -R root:oinstall /u01/software/grid
+	cd /u01/app/19.0.0/
+	tar -pcvf /u01/software/grid/grid_home_bkup.tar grid
+
+Taking a Tar backup of oracle Home
+
+ 	cd /u01/software/oracle
+	chown -R oracle:oinstall /u01/software/oracle
+	cd /u01/app/oracle/product/19.0.0
+	tar -pcvf /u01/software/oracle/oracle_home_bkup.tar db_1 
+
+Taking a Tar backup of inventory 
+
+	cd /u01/software/inventory
+	chown -R grid:grid /u01/software/inventory/
+	cd /u01/app
+	tar -pcvf /u01/software/inventory/inventory_bkup.tar oraInventory
+
+
+2. Before applying patch check inventory location pointing is correct to grid
+=============================================================================
+
+cd /u01/app/oraInventory/ContentsXML/
+cat inventory.xml
+	--------------------------------------------------------------------------------------------------
+	<HOME_LIST>
+	<HOME NAME="OraGI19Home1" LOC="/u01/app/19.0.0/grid" TYPE="O" IDX="1" CRS="true"/>
+	<HOME NAME="OraDB19Home1" LOC="/u01/app/oracle/product/19.0.0/db_1" TYPE="O" IDX="2"/>
+	</HOME_LIST>
+	--------------------------------------------------------------------------------------------------
+
+3. Download patch 36582629: GI RELEASE UPDATE 19.24.0.0.0 and Latest OPatch
+===========================================================================
+
+in MOS - Oracle Database 19c Release Update July 2024 Known Issues (Doc ID 19202407.9)
+Download - Grid Infrastructure Release Update 19.24.0.0.240716 (Cause we are having RAC environment )/Linux Flavour
+
+Download the OPATCH that are showing in Above GI Patch Readme .(12.2.0.1.42)
+
+
+4. Move GI patch and Opatch to the mount point and Unzip
+========================================================
+
+mv p36582629_190000_Linux-x86-64.zip p6880880_190000_Linux-x86-64.zip /u01/software/patch
+
+Change the Owner to Grid
+------------------------
+
+chown grid:oinstall /u01/software/patch/p36582629_190000_Linux-x86-64.zip
+chown grid:oinstall /u01/software/patch/p6880880_190000_Linux-x86-64.zip
+
+5.Check OPATCH Version and Update:
+==================================
+	** Grid User **
+
+We need a version of 12.2.0.1.42 .
+
+/u01/app/19.0.0/grid/OPatch/opatch version
+
+6. UNZIP the Patch as Grid User
+===============================
+
+if we have a Lower version then take a backup of old OPATCH and UNZIP 
+
+(Opatch unzip) 
+--------------
+cd /u01/app/19.0.0/grid/
+
+mv OPatch Opatch_20_Dec_24
+
+unzip /u01/software/patch/p6880880_190000_Linux-x86-64.zip		(need to be a grid permisson)
+
+/u01/app/19.0.0/grid/OPatch/opatch version - Check Again
+
+(GI Patch unzip)
+----------------
+
+cd /u01/software/patch
+
+unzip p36582629_190000_Linux-x86-64		(need to be a grid permisson)
+
+7. Patch Analyze
+================
+
+		**Grid User **
+
+Conflict Check 
+--------------
+	
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /u01/software/patch/36582629/36587798
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /u01/software/patch/36582629/36590554
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /u01/software/patch/36582629/36758186 
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /u01/software/patch/36582629/36648174
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -phBaseDir /u01/software/patch/36582629/36582781
+
+
+System Space Check
+------------------
+
+df -h (os level)
+
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckSystemSpace -phBaseDir /u01/software/patch/36582629/36587798
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckSystemSpace -phBaseDir /u01/software/patch/36582629/36590554
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckSystemSpace -phBaseDir /u01/software/patch/36582629/36758186
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckSystemSpace -phBaseDir /u01/software/patch/36582629/36648174
+/u01/app/19.0.0/grid/OPatch/opatch prereq CheckSystemSpace -phBaseDir /u01/software/patch/36582629/36582781
+
+
+8.Take a SPOOL of PATCH list  (BEFORE):
+========================================
+	(now all will store in a single file)
+
+opatch version - /u01/app/19.0.0/grid/OPatch/opatch version >> /u01/software/patch/Before_patch_apply.txt
+
+opatch lsinventory - /u01/app/19.0.0/grid/OPatch/opatch lsinventory>> /u01/software/patch/Before_patch_apply.txt
+
+opatch lspatches - /u01/app/19.0.0/grid/OPatch/opatch lspatches >> /u01/software/patch/Before_patch_apply.txt
+		
+9. STOP The DB Instance and ASM Manually
+========================================
+	** ROOT USER **
+
+10.Patch APPLY Time on Grid Home :
+================================
+		** Root User **
+
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /u01/software/patch/36582629 -analyze
+
+Actuall Apply
+-------------
+
+/u01/app/19.0.0/grid/OPatch/opatchauto apply /u01/software/patch/36582629 -oh /u01/app/19.0.0/grid
+
+(IF IT FAILED DUE TO ANY COST , RECTIFY THE ERROR AND RESUME)
+
+/u01/app/19.0.0/grid/OPatch/opatchauto resume
+
+11. POST PATCH
+==============
+	---------------
+	START THE  ASM 
+	---------------
+Again Take a spool of PATCH list (AFTER):
+
+
+	(now all will store in a single file)
+
+opatch version - /u01/app/19.0.0/grid/OPatch/opatch version >> /u01/software/patch/AFTER_patch_apply.txt
+
+opatch lsinventory - /u01/app/19.0.0/grid/OPatch/opatch lsinventory>> /u01/software/patch/AFTER_patch_apply.txt
+
+opatch lspatches - /u01/app/19.0.0/grid/OPatch/opatch lspatches >> /u01/software/patch/AFTER_patch_apply.txt

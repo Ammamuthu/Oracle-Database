@@ -1,0 +1,101 @@
+Clusterware (CRS) Commands:
+---------------------------
+These commands manage Oracle Clusterware (CRS), the software that manages Oracle RAC clusters and other Oracle resources.
+
+
+ps -ef | grep d.bin:
+Finds and lists processes related to Oracle Clusterware (d.bin), helping you check if Oracle Clusterware daemons are running.
+
+STATUS CHECKING 
+----------------
+
+crsctl check crs:
+Checks the health of Oracle Clusterware services. It reports if CRS is running properly or facing issues.
+
+crsctl status res -t:
+Displays the status of all Oracle Clusterware resources (such as databases, listeners) in a table format.
+
+crsctl status res -t -init:
+Displays the status of all resources in the initialization state (after cluster startup).
+
+crsctl check cluster -all:
+Checks the status of Oracle Clusterware services across all nodes in the cluster.
+
+START AND STOP CLUSTER IN SINGLE NODE
+-------------------------------------
+
+crsctl stop crs:
+Stops all Oracle Clusterware services on the node, shutting down CRS.
+
+crsctl stop crs -f:
+Forces Oracle Clusterware services to stop, even if there are active processes or warnings.
+
+crsctl start crs:
+Starts Oracle Clusterware services on the node.
+
+START AND STOP THE CLUSTER IN ALL NODE'S
+----------------------------------------
+
+crsctl stop cluster -all:
+Stops Oracle Clusterware services across all nodes in the cluster.
+
+crsctl start cluster -all:
+Starts Oracle Clusterware services across all nodes in the cluster.
+
+START AND STOP THE HIGN AVAILABILITY SERVICE:
+-----------------------------------
+
+crsctl stop has:
+Stops Oracle High Availability Services (HAS), which are part of the Oracle Clusterware.
+
+crsctl start has:
+Starts Oracle High Availability Services (HAS), which are part of the Oracle Clusterware.
+
+
+==========================================================================================================================================================
+
+Database and Instance Management Commands:
+These commands are used to configure, manage, and monitor Oracle databases and instances within Oracle RAC (Real Application Clusters).
+
+RAC DETAILS 
+-----------
+
+srvctl config database:
+Displays the configuration details for all RAC databases, such as which nodes they are configured to run on.
+
+srvctl config database -d dbname:
+Shows configuration details for a specific database (dbname).
+
+RAC DB DETAILS
+--------------
+srvctl status database -d dbname:
+Displays the current status (running, stopped, etc.) of the specified database (dbname).
+
+srvctl status database -d dbname -v:
+Provides a more detailed, verbose status of the specified database, including the status of each instance(OPEN/MOUNT).
+
+START AND STOP THE ALL DB INSTANCES:
+------------------------------------
+
+srvctl stop database -d racdb:
+Stops the specified Oracle RAC database (racdb), shutting down all its instances.
+
+srvctl start database -d racdb:
+Starts the specified Oracle RAC database (racdb), initializing its instances.
+
+START AND STOP THE PARTICULAR INSTANCE:
+---------------------------------------
+
+srvctl stop instance -i racdb1 -d racdb:
+Stops the specific instance (racdb1) of the racdb database.
+
+srvctl stop instance -i racdb2 -d racdb:
+Stops another instance (racdb2) of the racdb database.
+
+srvctl start instance -i racdb1 -d racdb:
+Starts the specific instance (racdb1) of the racdb database.
+
+srvctl start instance -i racdb2 -d racdb:
+Starts another instance (racdb2) of the racdb database.
+
+==========================================================================================================================================================
