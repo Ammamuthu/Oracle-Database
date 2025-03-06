@@ -1,0 +1,345 @@
+IMP ----------x----------------------------EXP 
+
+Step 1:Source Server
+--------------------
+Check the Tablespace Size for System related Tablespace 
+
+=============================================================================
+col "Tablespace" for a22
+col "Used MB" for 99,999,999
+col "Free MB" for 99,999,999
+col "Total MB" for 99,999,999
+
+select df.tablespace_name "Tablespace",
+totalusedspace "Used MB",
+(df.totalspace - tu.totalusedspace) "Free MB",
+df.totalspace "Total MB",
+round(100 * ( (df.totalspace - tu.totalusedspace)/ df.totalspace))
+"Pct. Free"
+from
+(select tablespace_name,
+round(sum(bytes) / 1048576) TotalSpace
+from dba_data_files
+group by tablespace_name) df,
+(select round(sum(bytes)/(1024*1024)) totalusedspace, tablespace_name
+from dba_segments
+group by tablespace_name) tu
+where df.tablespace_name = tu.tablespace_name ;
+=============================================================================
+Step 2: Data Pump Directory
+---------------------------
+
+A.) Check for Data Pump Directory 
+
+=============================================================================
+select * from dba_directories;
+=============================================================================
+
+B.) Create a Data Pump Direcory (If we dont Have One)
+
+
+=============================================================================
+mkdir -p /u02/dp_exp_dir
+
+** sqlplus / as sysdba **
+
+create directory datapump as '/u02/dp_exp_dir';
+
+grant read,write on directory datapump to User;       (User that going to use for export) 
+
+select * from dba_directories;
+ 
+=============================================================================
+Step 3: Expdp - Export
+-----------------------
+
+** Check the SERVER SPACE **
+		df -kh
+
+
+A.) Taking a Full db export
+
+export ORACLE_SID=DBNAME
+
+nohup expdp TRANS/AMBDB123$ Directory=DATA_PUMP_DIR DUMPFILE=RPPFULL.DMP logfile=rppimpfullDB.log full=y &
+
+B.) Taking all Schema that are Not Manintained by oracle
+
+** sqlplus / as sysdba **
+
+=============================================================================
+select username from all_users where oracle_maintained = 'N';  					-----> Actual Query 
+
+
+SELECT LISTAGG(username, ',') WITHIN GROUP (ORDER BY username) AS schemas
+FROM all_users
+WHERE oracle_maintained = 'N';            									 	------>O/P as Comma seprated 
+
+============================================================================= 
+
+nohup expdp TRANS/AMBDB123$ directory=DATA_PUMP_DIR EXCLUDE=STATISTICS JOB_NAME=JBFORSTRS dumpfile=RPPSTRS1.dmp 
+schemas=DATA_VLDTN,WPS,IMS_RPP,RTGS,RTP,IMS_IF,IMSTOOLS,RTP1,IMS_RPT,RTP2,MANDATE,FPX,AMBANKADMIN,RECON_CONFIG,ENRICH,IMS_RECON,IMS_MM,MM_CONFIG,RTGS_MT,IMS_DOCS,IMS_TABLES,CRT_MANUAL,COMPLIANCE,CONFIG,TRANS COMPRESSION=ALL &
+
+
+C.) Cross Check in Background
+
+ps -ef | grep exp
+
+** sqlplus / as sysdba **
+
+=============================================================================
+
+SELECT sl.sid, sl.serial#, sl.sofar, sl.MESSAGE,sl.totalwork, dp.owner_name, dp.state, dp.job_mode
+FROM v$session_longops sl, v$datapump_job dp
+WHERE sl.opname = dp.job_name
+
+select * from dba_datapump_jobs;
+
+select  NAME,user_id, session_id, status, start_time, suspend_time, sql_text, error_number, error_msg from dba_resumable;
+
+=============================================================================
+
+D.) Check Status of EXPDB
+
+Above Query's will Give you a Name so if your session Get off You can Check a status
+
+expdp TRANS/AMBDB123$ attach=SYS_EXPORT_SCHEMA_01
+
+You can Stop also if you want
+
+stop_job=immediate (Pause)
+START_JOB  (Resume)
+KILL_JOB   (Force kill)
+
+Step 4 : SCP to Target Server
+-----------------------------
+
+scp Filename.dmp oracle@182.32.322.33:/path/to/datapump/dir
+
+** sqlplus / as sysdba *
+=============================================================================
+
+select * from dba_directories;
+
+=============================================================================
+
+Check the Tablespace Size for System related Tablespace 
+
+=============================================================================
+SELECT * FROM (SELECT TABLESPACE_NAME, SUM(USED_SPACE) USED_SIZE, SUM(TOTAL_SPACE) DATAFILES_MAX_SIZE, SUM(AVALIABLE_SPACE) AVALIABLE_SPACE,
+ROUND ( (SUM(USED_SPACE) * 100) / SUM(TOTAL_SPACE)) || '%' USED_SIZE_PCT
+FROM (
+SELECT TABLESPACE_NAME,
+                   ROUND (BYTES / 1024 / 1024 / 1024, 2) AS USED_SPACE,
+                   ROUND (MAXBYTES / 1024 / 1024 / 1024, 2) AS TOTAL_SPACE,
+                   ROUND ((MAXBYTES - BYTES) / 1024 / 1024 / 1024, 2)
+                      AS AVALIABLE_SPACE
+              FROM DBA_DATA_FILES where AUTOEXTENSIBLE = 'YES'
+union all              
+SELECT TABLESPACE_NAME,
+                   ROUND (BYTES / 1024 / 1024 / 1024, 2) AS USED_SPACE,
+                   ROUND (BYTES / 1024 / 1024 / 1024, 2) AS TOTAL_SPACE,
+                   ROUND ((BYTES - BYTES) / 1024 / 1024 / 1024, 2)
+                      AS AVALIABLE_SPACE
+              FROM DBA_DATA_FILES where AUTOEXTENSIBLE = 'NO')
+GROUP BY TABLESPACE_NAME)
+   WHERE USED_SIZE > 1;
+
+
+For more details about datafiles
+--------------------------------
+
+SELECT FILE_NAME, TABLESPACE_NAME, AUTOEXTENSIBLE, MAXBYTES 
+FROM DBA_DATA_FILES 
+WHERE TABLESPACE_NAME = 'IM';
+
+
+=============================================================================
+** OS Level **
+		
+	df -kh 
+
+Step 5 : Before Importing if the the db is running Clear the DB/Schemas all
+---------------------------------------------------------------------------
+** sqlplus / as sysdba **
+
+=============================================================================
+
+Drop a User from Target Server (Run the answer also on Target Server)
+-------------------------------
+SELECT 'DROP USER ' || username || ' cascade ;' 
+FROM all_users 
+WHERE oracle_maintained = 'N';
+
+IF you Face any isuue - During Drop Kill the session other the sys and System
+-----------------------------------------------------------------------------
+
+
+BEGIN
+   FOR rec IN (SELECT sid, serial# 
+               FROM v$session 
+               WHERE username IS NOT NULL 
+               AND username != 'SYS' 
+               AND username != 'SYSTEM') -- Exclude SYS and SYSTEM users
+   LOOP
+      BEGIN
+         -- Kill the session
+         EXECUTE IMMEDIATE 'ALTER SYSTEM KILL SESSION ''' || rec.sid || ',' || rec.serial# || ''' IMMEDIATE';
+         DBMS_OUTPUT.PUT_LINE('Killed session: SID=' || rec.sid || ' SERIAL=' || rec.serial#);
+      EXCEPTION
+         WHEN OTHERS THEN
+            -- Handle error if session cannot be killed
+            DBMS_OUTPUT.PUT_LINE('Error killing session: SID=' || rec.sid || ' SERIAL=' || rec.serial#);
+      END;
+   END LOOP;
+END;
+/
+
+
+create user from Source - to - Target (Run it on Source Server and Run a Output on Target Server)
+-------------------------------------
+
+SELECT 'CREATE USER ' || username || ' IDENTIFIED BY AMBDB123;' 
+FROM all_users 
+WHERE oracle_maintained = 'N';
+
+
+================================================================================
+If you want to give the exact privilages that from source means,
+
+** sqlplus / as sysdba ** 
+
+set long 999999999
+SELECT dbms_metadata.get_ddl('USER','username') FROM dual;
+select dbms_metadata.get_granted_ddl('ROLE_GRANT', 'IMS_MM') from dual;
+select dbms_metadata.get_granted_ddl('SYSTEM_GRANT', 'username') from dual;
+select dbms_metadata.get_granted_ddl('OBJECT_GRANT', 'username') from dual;
+
+(above querys Combined)
+
+set long 999999999
+SELECT dbms_metadata.get_ddl('USER', 'TRANS')
+  FROM dual
+UNION ALL
+SELECT dbms_metadata.get_granted_ddl('ROLE_GRANT', grantee)
+  FROM dba_role_privs
+ WHERE grantee = 'TRANS'
+   AND ROWNUM = 1
+UNION ALL
+SELECT dbms_metadata.get_granted_ddl('DEFAULT_ROLE', grantee)
+  FROM dba_role_privs
+ WHERE grantee = 'TRANS'
+   AND ROWNUM = 1
+UNION ALL
+SELECT dbms_metadata.get_granted_ddl('SYSTEM_GRANT', grantee)
+  FROM dba_sys_privs sp,
+       system_privilege_map spm
+ WHERE sp.grantee = 'TRANS'
+   AND sp.privilege = spm.name
+   AND spm.property <> 1
+   AND ROWNUM = 1
+UNION ALL
+SELECT dbms_metadata.get_granted_ddl('OBJECT_GRANT', grantee)
+  FROM dba_tab_privs
+ WHERE grantee = 'TRANS'
+   AND ROWNUM = 1
+UNION ALL
+SELECT dbms_metadata.get_granted_ddl('TABLESPACE_QUOTA', username)
+  FROM dba_ts_quotas
+ WHERE username = 'TRANS'
+   AND ROWNUM = 1;
+
+
+
+User Priviliages For Target Server
+
+
+GRANT CREATE TABLE TO TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT CREATE VIEW TO TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT CREATE PROCEDURE TO TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT CREATE SEQUENCE TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT CREATE MATERIALIZED VIEW TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT EXECUTE ON SYS.DBMS_SYSTEM TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON SYS.DBA_SEQUENCES TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON SYS.DBA_OBJECTS TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT EXECUTE ON DBMS_CRYPTO TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON DBA_SCHEDULER_JOBS TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON DBA_MVIEWS TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+grant select on  sys.v_$archived_log to config;
+grant select on v_$DATABASE to TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON SYS.DBA_TAB_COLS TO TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT EXECUTE ON SYS.DBMS_SYSTEM TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON SYS.DBA_SEQUENCES TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON SYS.DBA_OBJECTS TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT CREATE SESSION TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+ GRANT UNLIMITED TABLESPACE TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+-- GRANT RESOURCE TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT SELECT ON DBA_SNAPSHOTS TO  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+grant create synonym to  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+grant create  PUBLIC synonym to  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+-- grant create   ANY PROCEDURE    to  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+-- grant create  ANY TRIGGER to  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+GRANT CREATE TYPE TO   TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_SM,SM_CONFIG,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+grant unlimited tablespace to  TRANS,CONFIG,ENRICH,COMPLIANCE,CRT_MANUAL,IMS_TABLES,IMSTOOLS,IMS_DOCS,IMS_MM,MM_CONFIG,MANDATE,IMS_RECON,RECON_CONFIG,RTGS_MT,IMS_CT,CT_CONFIG,ENRICH_CT,IMS_RPT,FPX,IMS_IF,RTP,RTGS,IMS_RPP,WPS,RTP2,RTP1,IMS_BH;
+
+=============================================================================
+
+Step 6 : IMPdp on Target Server
+--------------------------------
+
+export ORACLE_SID=DBNAME
+
+
+** sqlplus / as sysdba **
+
+select * from dba_directories;              ---> Get the data Pump Directories
+
+
+	**OS Level **
+
+impdp TRANS/AMBDB123 Directory=DATA_PUMP_DIR logfile=rppimp.log DUMPFILE=RPPLIV.DMP FULL=Y transform=segment_attributes:n
+
+Step 7: CrossCheck imp on Target Server
+---------------------------------------
+
+ ** sqlplus / as sysdba **
+
+============================================================================= 
+select b.tablespace_name, tbs_size SizeMb, a.free_space FreeMb
+from  (select tablespace_name, round(sum(bytes)/1024/1024 ,2) as free_space
+       from dba_free_space
+       group by tablespace_name) a,
+      (select tablespace_name, sum(bytes)/1024/1024 as tbs_size
+       from dba_data_files
+       group by tablespace_name) b
+where a.tablespace_name(+)=b.tablespace_name;
+
+=============================================================================
+ERROR DURING :  (EXP/IMP)
+-------------------------
+
+expdp TRANS/AMBDB123$ directory=DATA_PUMP_DIR parallel=8 EXCLUDE=STATISTICS JOB_NAME=JBFORSTRS dumpfile=RPPSTRS1.dmp schemas=DATA_VLDTN,WPS,IMS_RPP,RTGS,RTP,IMS_IF,IMSTOOLS,RTP1,IMS_RPT,RTP2,MANDATE,FPX,AMBANKADMIN,RECON_CONFIG,ENRICH,IMS_RECON,IMS_MM,MM_CONFIG,RTGS_MT,IMS_DOCS,IMS_TABLES,CRT_MANUAL,COMPLIANCE,CONFIG,TRANS COMPRESSION=ALL
+
+WE USE THIS COMMAND TO export BUT parallel=8 this parameter have some issue with 
+
+
+ORA-39095: Dump file space has been exhausted: Unable to allocate 8192 bytes
+Job "TRANS"."RPP_JBFORSTRS" stopped due to fatal error at Sat Feb 15 20:14:41 2025 elapsed 0 04:39:57
+
+If we remove parllel=8 we can get a Output 
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+impdb --
+ Check a Tablespace need to have some Size
+
+
+ORA-39171: Job is experiencing a resumable wait.
+Resumable error: ORA-01688: unable to extend table TRANS.EMAIL_HISTORY partition MF_ACT by 8192 in tablespace USERS
+Resumable stmt:  BEGIN    SYS.KUPW$WORKER.MAIN('SYS_IMPORT_FULL_01', 'TRANS', 0, 0);  END;
+Resumable stmt status: SUSPENDED
+Resumable stmt start: 02/16/25 09:55:28 stmt suspend: 02/16/25 09:58:16
+
+Add some datafiles Then It will Resume
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------

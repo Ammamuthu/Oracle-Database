@@ -1,0 +1,67 @@
+============Webloic For Linux=====================================
+
+
+1. Takin a TAR Backup of Domains folder
+----------------------------------------
+cd /u01/app/bea_14_1/user_projects/domains/
+tar -pcvf /u01/bkp/TCHQA1_BKP.tar TCHQA1/
+
+2. Move a Patch to Stageing Area
+--------------------------------
+scp p28186730_1394218_Generic.zip p37476502_141100_Generic.zip  imsadmin@192.168.222.77:/u01/bkp/
+
+
+unzip OPATCH --unzip p28186730_1394218_Generic.zip
+unzip Patch -- unzip p37476502_141100_Generic.zip
+
+
+3. Opatch Apply Upgrade
+------------------------
+
+java -jar /u01/PATCH/6880880/opatch_generic.jar -silent ORACLE_HOME=/u01/app/bea_14_1/
+
+(or)
+
+java -jar opatch_generic.jar -silent ORACLE_HOME=/u01/app/bea14_1/ -invPtrLoc /u01/app/weboraInventory/oraInst.loc
+This is the command i have used  for "Error : Invalid Central location "
+
+
+[imsadmin@ppptechAPP pathes]$ /u01/app/bea_14_1/OPatch/opatch version
+OPatch Version: 13.9.4.2.18
+
+OPatch succeeded.
+[imsadmin@ppptechAPP pathes]$
+
+4.Apply Actual Patch 
+
+(DOWN The Application)
+
+---------------------
+cd WLS_SPB_14.1.1.0.<VERSION>/binary_patches
+
+/u01/app/bea_14_1/OPatch/opatch napply -report -oh /u01/app/bea_14_1/  -phBaseFile linux64_patchlist.txt 
+
+
+(Actual Patch apply)
+/u01/app/bea_14_1/OPatch/opatch napply -oh /u01/app/bea_14_1/  -phBaseFile linux64_patchlist.txt
+
+---------------------------------------------------------------------------------------------------------
+
+[imsadmin@tvwv-mhps-app-arc binary_patches]$ /u01/app/bea_14_1/OPatch/opatch lsinv | grep applied
+Patch  37476525     : applied on Fri Feb 14 18:28:04 IST 2025
+Patch  37458537     : applied on Fri Feb 14 18:28:00 IST 2025
+Patch  37351880     : applied on Fri Feb 14 18:25:00 IST 2025
+Patch  37258703     : applied on Fri Feb 14 18:24:55 IST 2025
+Patch  37202241     : applied on Fri Feb 14 18:24:32 IST 2025
+Patch  37140343     : applied on Fri Feb 14 18:24:16 IST 2025
+Patch  36723262     : applied on Fri Feb 14 18:24:11 IST 2025
+[imsadmin@tvwv-mhps-app-arc binary_patches]$
+
+
+WINDOWS patch apply WebLogic
+----------------------------
+
+java -jar D:\ims_ecs\patch\Jan2025\Weblogic\WLS_SPB_14.1.1.0.250114\tools\opatch\generic\6880880\opatch_generic.jar -silent ORACLE_HOME=D:\ims_ecs\bea_14_1
+cd D:\ims_ecs\patch\Jan2025\Weblogic\WLS_SPB_14.1.1.0.250114\binary_patches
+D:\ims_ecs\bea14_1\OPatch\opatch napply -report -oh D:\ims_ecs\bea14_1 -phBaseFile windows64_patchlist.txt
+D:\ims_ecs\bea14_1\OPatch\opatch napply -oh D:\ims_ecs\bea14_1 -phBaseFile windows64_patchlist.txt
