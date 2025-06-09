@@ -1,0 +1,125 @@
+1. ) What is a view?
+--------------------
+
+If they have a query they need to run daily means . They store it in a notepad and run .
+
+---------------------------------------------
+
+SELECT p.product_name, SUM(o.quantity) AS total_quantity
+FROM products p
+JOIN orders o ON p.product_id = o.product_id
+GROUP BY p.product_name
+ORDER BY total_quantity DESC
+LIMIT 5;
+
+----------------------------------------------
+
+But instead of Notepad to copy/paste in db and running , will create the query inside a Db .This is called a View .
+
+------------------------------------------------------------
+
+CREATE VIEW best_sellers_5 AS
+SELECT p.product_name, SUM(o.quantity) AS total_quantity
+FROM products p
+JOIN orders o ON p.product_id = o.product_id
+GROUP BY p.product_name
+ORDER BY total_quantity DESC
+LIMIT 5;
+
+
+SELECT * from best_sellers_5;   ==  This will work .
+
+
+-----------------------------------------------------------
+
+2. ) Materialized View :
+------------------------
+
+when you materialize a view (that is, when you create a materialized view), you create a concrete table to store its results.
+
+Note : In view it will store a query not a data when you run a view it will fetch a data on a actual Table .
+
+But
+
+In MV it will store a that query physical data inside a materialized view .So it will be fast .
+
+
+(i.e) When you query this materialized view, the database DOES NOT run the query, but rather, it fetches the results that are currently stored in the table. Therefore, you get the results pretty quickly.
+
+
+
+
+Scenario : When a base table data is changing means , it will not change a MV , if that need to reflect on MV also means we have to refresh a MV , to reflect it here .
+
+ " The data in materialized views needs to be refreshed when data in the underlying tables changes, and the frequency of refreshing determines the degree of data freshness ".
+
+
+Syntax 
+
+___________________________________________________________________
+
+CREATE MATERIALIZED VIEW view-name
+BUILD [IMMEDIATE | DEFERRED]
+REFRESH [FAST | COMPLETE | FORCE ]
+ON [COMMIT | DEMAND ]
+[[ENABLE | DISABLE] QUERY REWRITE]
+AS
+SELECT ...;
+____________________________________________________________________
+
+
+
+IMMEDIATE : The materialized view is populated immediately
+DEFERRED : The materialized view is populated on the first requested refresh.
+
+
+
+FAST : This need a materialized view logs , so that all the changes in Base table like INSTER/UPDATE/DELETE will note that mv logs and easy to refresh , This method will refresh only a particular changes that done not entrie table again and again
+
+COMPLETE : This will truncate the entire table and again it will repopulate from the base table updated data .(Take more time/effort on db side ).
+
+FORCE  : A fast refresh is attempted. If one is not possible a complete refresh is performed.
+
+
+ON COMMIT : The refresh can be triggered by a committed data change in one of the dependent tables.
+ON DEMAND : The refresh is initiated by a manual request or a scheduled task.
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+CREATE MATERIALIZED VIEW best_sellers_5_mv
+BUILD IMMEDIATE
+REFRESH FAST
+ON DEMAND
+AS
+SELECT p.product_name, SUM(o.quantity) AS total_quantity
+FROM products p
+JOIN orders o ON p.product_id = o.product_id
+GROUP BY p.product_name
+ORDER BY total_quantity DESC
+FETCH FIRST 5 ROWS ONLY;
+
+
+
+-- Assuming 'orders' is the base table that changes
+
+MV LOGS
+
+CREATE MATERIALIZED VIEW LOG ON orders
+WITH ROWID, SEQUENCE (product_id, quantity)
+INCLUDING NEW VALUES;							-- > for New values without this fast refresh fail
+
+--manuall refresh 
+
+
+BEGIN
+   DBMS_MVIEW.REFRESH('BEST_SELLERS_5_MV', 'F');  -- 'F' = Fast Refresh
+END;
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+Reference 1 : https://medium.com/learning-sql/understanding-materialized-views-e4a357efcfef
+Refernece 2 : https://oracle-base.com/articles/misc/materialized-views

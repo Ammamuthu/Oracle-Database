@@ -107,7 +107,7 @@ COL STATUS FOR A20
 SET MARKUP HTML ON
 
 -- Specify the file to spool the output
-SPOOL /u01/software/dbpatch/Before_patch_dba_registry_sqlpatch_info.html
+SPOOL /u01/software/patch/After_patch_dba_registry_sqlpatch_info.html
 
 -- Execute the query to fetch the patch details
 SELECT install_id,
@@ -137,7 +137,7 @@ COL STATUS FOR A20
 SET MARKUP HTML ON
 
 -- Specify the file to spool the output to HTML
-SPOOL /u01/software/dbpatch/Before_patch_invalid_obj_info.html
+SPOOL /u01/software/patch/After_patch_invalid_obj_info.html
 
 -- Execute the query to fetch invalid objects details
 SELECT OWNER, 

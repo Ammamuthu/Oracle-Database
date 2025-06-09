@@ -1,0 +1,83 @@
+How to Create a Multiple DATA SOURCE in oracle weblogic 
+-------------------------------------------------------
+
+Go to the Source Server
+-----------------------
+
+UNDER CONFIG 
+
+path = /u01/app/bea_14_1/user_projects/domains/basedomain/config    
+
+- JDBC (folder)
+- Config.xml
+
+These 2 only we need to focus for Data source 
+
+1.)open Config.xml 
+2.)copy the jdbc below contents
+3.) put that in a your config.xml
+
+eg:
+===
+
+<admin-server-name>AdminServer</admin-server-name>
+
+  <jdbc-system-resource>
+    <name>h2db</name>
+    <target>AdminServer</target>
+    <descriptor-file-name>jdbc/h2db-jdbc.xml</descriptor-file-name>
+  </jdbc-system-resource>
+
+---------
+------
+------
+
+  <jdbc-system-resource>
+    <name>rtp</name>
+    <target>AdminServer</target>
+    <descriptor-file-name>jdbc/h2db-jdbc.xml</descriptor-file-name>
+  </jdbc-system-resource>
+
+</domain>
+
+-----------------------------------------------------
+
+Move a jdbc folder from source to target same location
+
+source - /u01/app/bea_14_1/user_projects/domains/basedomain/config/jdbc
+
+target - /u01/app/bea_14_1/user_projects/domains/basedomain/config/jdbc
+
+-----------------------------------------------------
+
+
+if in case your changing a new encryption password means 
+---------------------------------------------------------
+
+Go to your Base domain location
+
+1.) path = /u01/app/bea_14_1/user_projects/domains/basedomain
+
+2.) Run the command under this location if need set a JAVA_HOME path
+
+java -cp "/u01/app/bea_14_1/wlserver/server/lib/weblogic.jar" weblogic.security.Encrypt RPPDEV123
+
+(Note = instead of RPPDEV123 change your db user Password) 
+
+o/p:
+---
+{AES256}t1gEETVf1uwDQ6eSby8tjiRO3yps17S8jgDbHAmQDKg=
+
+------------------------------------------------------------------
+
+Replace a encryption value on all JDBC/.xml file (That we took from source)
+
+1. open all files in Notepad++
+2. click "ctr+h" in a find and Replace tab click Regular Expression 
+3. find = <password-encrypted>.*?</password-encrypted>
+4. Replace = <password-encrypted>{AES256}t1gEETVf1uwDQ6eSby8tjiRO3yps17S8jgDbHAmQDKg=</password-encrypted>
+5. Save All
+
+ 
+ 
+ 

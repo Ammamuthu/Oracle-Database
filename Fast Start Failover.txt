@@ -1,0 +1,85 @@
+****				Connect DGMGRL						****
+
+DGMGRL> connect sys
+Password:
+Connected to "IMS_P"
+Connected as SYSDBA.
+
+-----------------------------------------------
+Pre Requesties 
+
+****	DB Level	****
+
+show parameter dg_broker_start
+alter system set dg_broker_start=true scope=Both;
+
+show parameter log_archive_dest_2;									(Take a Note /Once done with DGMGRL change back to normal)
+alter system set log_archive_dest_2='' scope=both;     
+
+-----------------------------------------------
+
+1.)  Create a Configuration on Primary Database 
+
+CREATE CONFIGURATION 'my_config' AS PRIMARY DATABASE IS 'CDB_P' CONNECT IDENTIFIER IS 'CDB_P';
+
+2.) Add a Standby DATABASE 
+
+ADD DATABASE 'CDB_D' AS CONNECT IDENTIFIER IS 'CDB_D' MAINTAINED AS PHYSICAL;
+
+3.)  Start the Configuration 
+
+ENABLE CONFIGURATION;
+
+****      Run it in a DGMGRL     ****
+
+EDIT DATABASE 'CDB_P' set state='TRANSPORT-ON';
+EDIT DATABASE 'CDB_D' set state='APPLY-ON';
+EDIT DATABASE 'CDB_P' set PROPERTY 'TransportDisconnectedThreshold'=0;
+EDIT DATABASE 'CDB_D' SET PROPERTY 'TransportDisconnectedThreshold'=0;
+EDIT DATABASE 'CDB_P'SET PROPERTY 'LogXptMode'='SYNC';
+EDIT DATABASE 'CDB_D' SET PROPERTY 'LogXptMode'='SYNC';
+EDIT DATABASE 'CDB_P'SET PROPERTY 'REDOCOMPRESSION'='ENABLE';
+EDIT DATABASE 'CDB_D' SET PROPERTY 'REDOCOMPRESSION'='ENABLE';
+EDIT CONFIGURATION SET PROTECTION MODE AS MAXPERFORMANCE;
+EDIT DATABASE 'CDB_P' SET PROPERTY 'ArchiveLagTarget'=1200;
+EDIT DATABASE 'CDB_P' SET PROPERTY 'LogArchiveMaxProcesses'=10;
+EDIT DATABASE 'CDB_P' SET PROPERTY 'LogArchiveMinSucceedDest'=1;
+EDIT DATABASE 'CDB_D' SET PROPERTY 'ArchiveLagTarget'=1200;
+EDIT DATABASE 'CDB_D' SET PROPERTY 'LogArchiveMaxProcesses'=10;
+EDIT DATABASE 'CDB_D' SET PROPERTY 'LogArchiveMinSucceedDest'=1;
+
+
+cmd's To check in on DGMGRL
+----------------------------------------
+show Configuration
+show database IMS_P
+show database IMS_d
+show database verbose IMS_P
+show database verbose IMS_D
+----------------------------------------
+
+FSFO - Fast Start FailOver
+--------------------------
+
+
+EDIT DATABASE IMS_P SET PROPERTY FastStartFailoverTarget ='ims_d';			(Primary to Standby)
+EDIT DATABASE IMS_D SET PROPERTY FastStartFailoverTarget ='ims_p';			(Standby To Primary)
+
+-
+
+enable fast_start failover;													(Enable This and Immediatly run the Observer)
+nohup dgmgrl sys/Ebslabs123@IMS_D "start observer" &						-- Run it on Standby only 
+
+Show fast_start failover;
+!ps -ef | grep dgmgrl
+
+
+
+Stoping FSFO 
+------------
+****  dgmgrl *****
+
+stop observer;
+DISABLE fast_start failover;
+show fast_start failover
+show configuration

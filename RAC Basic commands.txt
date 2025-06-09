@@ -99,3 +99,122 @@ srvctl start instance -i racdb2 -d racdb:
 Starts another instance (racdb2) of the racdb database.
 
 ==========================================================================================================================================================
+
+srvctl -help >>> List All Commands With Syntax
+
+srvctl status listener -n node1 >>> Check Listener Status Of Specific Node
+srvctl status listener >>> Check Listener Status Of All Nodes
+
+srvctl start listener -n node1 >>> Start Listener On Specific Node
+srvctl start listener >>> Start Listener On All Nodes
+
+srvctl stop listener -n node1 >>> Stop Listener On Specific Node
+srvctl stop listener >>> Stop Listener On All Nodes
+
+srvctl status instance -d CDBTEST -i CDBTEST1 >>> Check Status Of Specific Instance
+srvctl status database -d CDBTEST >>> Check Status Of All Instances
+
+srvctl start instance -d CDBTEST -i CDBTEST1 >>> Starts Specific Instance
+srvctl start database -d CDBTEST >>> Starts All Instances (+Open Database)
+
+srvctl start database -d CDBTEST -o nomount >>> Starts Service As Nomount
+srvctl start database -d CDBTEST -o mount >>> Starts Service As Mount
+srvctl start database -d CDBTEST -o open >>> Starts Service As Open
+
+srvctl stop instance -d CDBTEST -i CDBTEST1 >>> Stops Specific Instance
+srvctl stop database -d CDBTEST >>> Stops All Instances (+Shutdown Database)
+
+srvctl stop database -d CDBTEST -o normal >>> Stops Service As Normal
+srvctl stop database -d CDBTEST -o immediate >>> Stops Service As Immediate
+srvctl stop database -d CDBTEST -o transactional >>> Stops Service As Transactional
+srvctl stop database -d CDBTEST -o abort >>> Stops Service As Abort
+
+srvctl config database >>> Check Registered Databases In The Repository
+srvctl config database -d CDBTEST >>> Check Specific Database Configuration
+
+==========================================================================================================================================================
+OTHER USEFUL COMMANDS
+show parameter CLUSTER_DATABASE; >>> Check Database Running As Cluster Or Not.
+
+select instance_name, host_name, archiver, thread#, status from gv$instance; >>> Check RAC Status.
+
+==========================================================================================================================================================
+
+SHUTDOWN SEQUENCE OF ONLY ONE NODE IN A CLUSTER
+
+Check Database And ASM Instance
+[root@node1 ~]# ps -ef | grep pmon | grep -v grep
+grid 9501 1 0 May24 ? 00:00:04 asm_pmon_+ASM1
+oracle 14761 1 0 08:54 ? 00:00:00 ora_pmon_CDBTEST1
+[root@node1 ~]#
+
+Check And Stop Instance
+[root@node1 ~]# srvctl status instance -d CDBTEST -i CDBTEST1
+[root@node1 ~]# srvctl stop instance -d CDBTEST -i CDBTEST1
+[root@node1 ~]# srvctl status instance -d CDBTEST -i CDBTEST1
+
+Check And Stop Oracle High Availability Services On The Local Server
+[root@node1 ~]# crsctl check crs
+[root@node1 ~]# crsctl stop crs
+[root@node1 ~]# crsctl check crs
+
+Check Database And ASM Instance
+[root@node1 ~]# ps -ef | grep pmon | grep -v grep
+[root@node1 ~]#
+
+==========================================================================================================================================================
+
+STARTUP SEQUENCE OF ONLY ONE NODE IN A CLUSTER
+Check And Scan ASM Discs
+[root@node1 ~]# ll /dev/oracleasm/disks/
+[root@node1 ~]# oracleasm scandisks
+[root@node1 ~]# ll /dev/oracleasm/disks/
+
+Check And Start Oracle High Availability Services On The Local Server
+[root@node1 ~]# crsctl check crs
+[root@node1 ~]# crsctl start crs
+[root@node1 ~]# crsctl check crs
+
+Check And Start Instance
+[root@node1 ~]# srvctl status instance -d CDBTEST -i CDBTEST1
+[root@node1 ~]# srvctl start instance -d CDBTEST -i CDBTEST1
+[root@node1 ~]# srvctl status instance -d CDBTEST -i CDBTEST1
+
+Check Database And ASM Instance
+[root@node1 ~]# ps -ef | grep pmon | grep -v grep
+grid 9501 1 0 May24 ? 00:00:04 asm_pmon_+ASM1
+oracle 14761 1 0 08:54 ? 00:00:00 ora_pmon_CDBTEST1
+[root@node1 ~]#
+
+==========================================================================================================================================================
+
+CLUSTERWARE CONTROL UTILITY (CRSCTL) – CLUSTER RELATED COMMANDS
+
+crsctl config has >>> Check Oracle HAS (High Availabilty Services) Config
+crsctl disable has >>> Disable Automatic Startup Of The Oracle High Availability Services
+crsctl enable has >>> Enable Automatic Startup Of The Oracle High Availability Services
+
+crsctl check crs >>> Check Oracle High Availability Services On The Local Server.
+crsctl stop crs >>> Stop Oracle High Availability Services On The Local Server.
+crsctl start crs >>> Start Oracle High Availability Services On The Local Server.
+
+crsctl query crs softwareversion >>> Check Oracle Clusterware Software Version
+crsctl query crs activeversion >>> Check Oracle Clusterware Acitve Version
+crsctl query crs releaseversion >>> Check Oracle Clusterware Release Version
+
+==========================================================================================================================================================
+[grid@AMBRPPNWDB1 ~]$ srvctl config database
+ARCH
+RPP
+[grid@AMBRPPNWDB1 ~]$ srvctl status database -d RPP -v
+Instance RPP1 is running on node ambrppnwdb1. Instance status: Open.
+Instance RPP2 is not running on node ambrppnwdb2
+[grid@AMBRPPNWDB1 ~]$ cd /u01/app/19.0.0/grid/bin/
+[grid@AMBRPPNWDB1 bin]$ ./crsctl check cluster -all
+**************************************************************
+ambrppnwdb1:
+CRS-4537: Cluster Ready Services is online
+CRS-4529: Cluster Synchronization Services is online
+CRS-4533: Event Manager is online
+**************************************************************
+

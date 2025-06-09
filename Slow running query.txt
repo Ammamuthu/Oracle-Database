@@ -1,0 +1,51 @@
+ DECLARE
+ l_sql_tune_task_id VARCHAR2(100);
+ BEGIN
+ l_sql_tune_task_id := DBMS_SQLTUNE.create_tuning_task (
+ sql_id => 'dsfva602u7d7k',
+ scope => DBMS_SQLTUNE.scope_comprehensive,
+ time_limit => 500,
+ task_name => 'my_tuning_task_3',
+ description => 'Tuning task1 for statement cdq26qbcmz1hc');
+ DBMS_OUTPUT.put_line('l_sql_tune_task_id: ' || l_sql_tune_task_id);
+ END;
+ /
+
+EXEC DBMS_SQLTUNE.execute_tuning_task(task_name => 'my_tuning_task_3');
+
+SELECT TASK_NAME, STATUS FROM DBA_ADVISOR_LOG WHERE TASK_NAME='my_tuning_task_3';
+
+set long 65536
+set longchunksize 65536
+set linesize 100
+select dbms_sqltune.report_tuning_task('my_tuning_task_3') from dual;
+
+
+execute dbms_sqltune.drop_tuning_task('my_tuning_task_1');
+
+
+
+set lines 160 pages 2000
+col owner format a15
+col table_name format a35
+col last_analyzed format a35
+col num_rows for 999999999999
+SELECT RPAD(owner,15,' ') Owner, RPAD(table_name,35,' ') Table_Name, num_rows, RPAD(TO_CHAR(last_analyzed,'DD-MON-YYYY HH24:MI:SS'),35,' ') last_analyzed
+FROM dba_tab_statistics
+WHERE owner IN ('TRANS')
+AND stale_stats='YES'
+ORDER BY owner;
+
+
+
+execute dbms_stats.gather_table_stats(ownname =>'TRANS,tabname =>'STUDENT',estimate_percent =>100);
+
+
+
+
+SQL> EXPLAIN PLAN FOR
+  2  SELECT * FROM STUDENTS;
+
+explained
+
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);

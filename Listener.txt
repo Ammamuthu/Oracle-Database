@@ -1,0 +1,62 @@
+Step -1 : Create Listener in Grid Level 
+---------
+
+vi /u01/app/19.0.0/grid/network/admin/listener.ora
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+LISTENERPPP =
+  (DESCRIPTION_LIST =
+    (DESCRIPTION =
+      (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.75.150)(PORT = 1523))
+    )
+  )
+
+ENABLE_GLOBAL_DYNAMIC_ENDPOINT_LISTENERPPP=ON           # line added by Agent
+VALID_NODE_CHECKING_REGISTRATION_LISTENERPPP=ON         # line added by Agent
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+step - 2 : Add a Listener Details in Oraclehome - Tnsnames
+---------
+
+vi /u01/app/oracle/product/19.0.0/db_1/network/admin/tnsnames.ora
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+LISTENERPPP =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.75.150)(PORT = 1523))
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+O/P :
+----
+
+[oracle@ppptechDB ~]$ tnsping LISTENERPPP
+
+TNS Ping Utility for Linux: Version 19.0.0.0.0 - Production on 13-MAY-2025 17:40:16
+
+Copyright (c) 1997, 2024, Oracle.  All rights reserved.
+
+Used parameter files:
+
+
+Used TNSNAMES adapter to resolve the alias
+Attempting to contact (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.75.150)(PORT = 1523))
+OK (30 msec)
+
+
+
+Step -3 :Map in the db parameter
+-------
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+NAME                                 TYPE                             VALUE
+------------------------------------ -------------------------------- ------------------------------
+local_listener                       string                           LISTENERPPP
+parallel_force_local                 boolean                          FALSE
+SQL>
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

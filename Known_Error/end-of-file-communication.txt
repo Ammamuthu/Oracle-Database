@@ -1,0 +1,49 @@
+Scenario : 1
+--------------
+
+SQL> startup
+ORACLE instance started.
+Total System Global Area 2147483648 bytes
+Fixed Size 2926472 bytes
+Variable Size 1224738936 bytes
+Database Buffers 905969664 bytes
+Redo Buffers 13848576 bytes
+Database mounted.
+ORA-03113: end-of-file on communication channel
+Process ID: 4903
+Session ID: 237 Serial number: 26032
+
+====================================================
+
+
+startup nomount;
+startup mount;
+
+----------------------------------
+ALTER SYSTEM ARCHIVE LOG ALL;
+-----------------------------------
+
+or (only in non important environment
+
+----------------------------------------------------
+alter database clear unarchived logfile group 1;
+alter database clear unarchived logfile group 2;
+alter database clear unarchived logfile group 3;
+----------------------------------------------------
+
+shut immediate 
+startup
+
+______________________________________________________________________________________
+
+Scenario - 2:
+-------------
+
+
+error :  ORA-01113: file needs media recovery
+
+
+--------------------------------
+SQL> RECOVER DATABASE;
+SQL> ALTER DATABASE OPEN;
+---------------------------------

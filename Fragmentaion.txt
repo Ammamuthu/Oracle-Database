@@ -1,0 +1,279 @@
+	Table List 
+
+TRANS.WS_REQ_RESP
+,IMS_IF.OUT_MSG
+,IMS_IF.TXN_DTL
+,IMS_IF.OUT_DTL_MASTER
+,TRANS.MSG_IN_REPOSITORY
+,TRANS.MSG_OUT_REPOSITORY
+,TRANS.MSG_OUT_ENVELOPE
+,IMS_IF.IN_MSG
+,IMS_IF.IN_DTL_MASTER
+,IMS_IF.OUT_DTL_MASTER_EVENT_LOG	
+,IMS_IF.TXN_DTL_EVENT_LOG
+,CONFIG.WS_SERVER_LOG
+[==============================================================]
+
+{{{{{{{{ CONFIG SCHEMA }}}}}}}}}}}}
+
+1. Disable Running Jobs
++++++++++++++++++++++++++++++++
+
+select job_name, state from dba_scheduler_jobs where owner='CONFIG';
+
+Run for the Following o/p 
+-------------------------
+execute dbms_scheduler.disable('CONFIG.JOB_MM_LIVE_TO_ARC_DBLINK');
+exec DBMS_SCHEDULER.STOP_JOB (job_name => 'CONFIG.JOB_MM_ACT_TO_LIVE', force => true);
+
+(Do the same for all output)
+
+
+2. Stop the MRP in DR
++++++++++++++++++++++++++++++++++
+
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+OR
+
+DGMGRL >> connect sys@rpp_p
+edit database 'RPP_D' set state='APPLY-OFF';
+
+
+3.Enable flashback,create restore point
++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT NAME,OPEN_MODE,DATABASE_ROLE,FLASHBACK_ON FROM V$DATABASE;
+
+if "FLASHBACK_ON - yes"  ignore below procced to 4 Step :
+
+{
+shut immediate;
+startup mount;
+ALTER DATABASE FLASHBACK ON;		-- Do the same if you have DR
+alter database open;
+}
+
+4.Start the MRP in DR
++++++++++++++++++++++++++++++++++++++++++
+
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+OR
+
+DGMGRL >> connect sys@rpp_p
+edit database 'RPP_D' set state='APPLY-ON';
+	
+5.creatE restore Point Before Start :
+++++++++++++++++++++++++++++++++++++++++++
+
+create restore point DAY1_BEFORE GUARANTEE FLASHBACK DATABASE;
+
+select GUARANTEE_FLASHBACK_DATABASE,NAME,to_char(SCN), TIME from v$restore_point;
+
+6. Get the list of invalid Objects:
++++++++++++++++++++++++++++++++++++++++++++
+spool Invalid_objects_b4_reorg.log
+
+
+select count(*) from dba_objects where status='INVALID';
+
+or
+
+set lines 200 pages 200 long 9999 time on timing on
+SELECT owner, object_name, object_type
+  FROM sys.dba_objects
+ WHERE object_type IN ('VIEW', 'PROCEDURE', 'FUNCTION')
+   AND status <> 'VALID'
+   AND OWNER IN ( 'TRANS','ENRICH','CRT_MANUAL','COMPLIANCE','IMS_TABLES','IMS_MM','MM_CONFIG','IMSTOOLS','RTGS_MT','RPT1','MANDATE', 'RTP2', 'FPX');
+
+spool off;;
+
+7.Check the Partions/Index/Inx-Partition to that Table  	(Take a SPool)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+A) Partition Deatils
+--------------------
+
+SELECT table_name,partition_name,tablespace_name FROM all_tab_partitions where table_name ='WS_SERVER_LOG';	   -  List of Partitions
+
+B ) INDEX DETAILS
+------------------
+
+select INDEX_NAME, TABLE_OWNER, TABLE_NAME, UNIQUENESS from ALL_INDEXES WHERE TABLE_NAME = 'WS_SERVER_LOG' and OWNER='CONFIG';    - list of index
+
+select index_name,owner,status from dba_indexes where owner='CONFIG' and table_name='WS_SERVER_LOG' and partitioned = 'NO';    	  - list of Non Partition indx 	
+
+select a.index_name, b.partition_name, a.status, b.status partition_index_status ,a.index_type
+from dba_indexes A, dba_ind_partitions B
+where a.owner='CONFIG' and a.table_name='WS_SERVER_LOG'
+and a.owner=b.index_owner and a.index_name = b.index_name and a.index_type <> 'LOB' order by a.index_name, b.partition_name;    - List of InX Partitions
+
+
+8. Checking the Size of Table/INDEX 
++++++++++++++++++++++++++++++++++++++++
+
+A) Size of Table with LOB's and LOB's Indx
+-------------------------------------------
+
+SELECT
+(SELECT NVL(SUM(S.bytes/1024/1024/1024),0)
+FROM DBA_SEGMENTS S
+WHERE S.OWNER = UPPER('CONFIG') AND
+(S.SEGMENT_NAME = UPPER('WS_SERVER_LOG'))) +
+(SELECT NVL(SUM(S.bytes/1024/1024/1024),0)
+FROM DBA_SEGMENTS S, DBA_LOBS L
+WHERE S.OWNER = UPPER('CONFIG') AND
+(L.SEGMENT_NAME = S.SEGMENT_NAME AND L.TABLE_NAME = UPPER('WS_SERVER_LOG')
+AND L.OWNER = UPPER('CONFIG'))) +
+(SELECT NVL(SUM(S.bytes/1024/1024/1024),0)
+FROM DBA_SEGMENTS S, DBA_INDEXES I
+WHERE S.OWNER = UPPER('CONFIG') AND
+(I.INDEX_NAME = S.SEGMENT_NAME AND I.TABLE_NAME = UPPER('WS_SERVER_LOG') AND
+INDEX_TYPE = 'LOB' AND I.OWNER = UPPER('CONFIG')))
+"TOTAL TABLE SIZE  AS  GB"
+FROM DUAL;
+
+B ) SIZE of Partition's
+------------------------
+
+SELECT NM, SUM(DSIZE)as GB FROM (
+SELECT PARTITION_NAME AS NM,  NVL(SUM(S.BYTES/1024/1024/1024),0)  AS DSIZE
+FROM DBA_SEGMENTS S
+WHERE S.OWNER = UPPER('CONFIG') AND S.SEGMENT_TYPE = 'TABLE PARTITION' AND (S.SEGMENT_NAME = UPPER('WS_SERVER_LOG'))
+GROUP BY PARTITION_NAME
+UNION ALL
+SELECT L.PARTITION_NAME AS NM,  NVL(SUM(S.BYTES/1024/1024/1024),0) AS DSIZE
+FROM DBA_SEGMENTS S, DBA_LOB_PARTITIONS L
+WHERE S.PARTITION_NAME = L.LOB_PARTITION_NAME
+    AND S.OWNER = 'CONFIG'
+    AND L.TABLE_OWNER = S.OWNER
+    AND L.TABLE_NAME = 'WS_SERVER_LOG'
+GROUP BY L.PARTITION_NAME
+UNION ALL
+SELECT 'INDEX_LOB' AS NM, NVL(SUM(S.BYTES/1024/1024/1024),0) AS DSIZE
+FROM DBA_SEGMENTS S, DBA_INDEXES I
+WHERE S.OWNER = UPPER('CONFIG') AND
+(I.INDEX_NAME = S.SEGMENT_NAME AND I.TABLE_NAME = UPPER('WS_SERVER_LOG') AND INDEX_TYPE = 'LOB' AND I.OWNER = UPPER('RTP1'))
+) GROUP BY NM;
+
+C ) Size of INDEX 'Each and Every '
+------------------------------------
+
+SELECT idx.table_name, idx.index_name,ind.partition_name,SUM(bytes)/1024/1024 MB
+FROM dba_segments seg,
+     dba_indexes idx,
+   dba_ind_partitions ind
+WHERE idx.table_owner = 'CONFIG'
+  AND idx.table_name = ('WS_SERVER_LOG')
+  AND idx.owner       = seg.owner
+  AND idx.index_name  = seg.segment_name
+and ind.index_name=idx.index_name
+and idx.index_type <> 'LOB'
+GROUP BY idx.index_name, idx.table_name,ind.partition_name;
+
+9.Alter Session
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ALTER SESSION FORCE PARALLEL QUERY parallel 64;
+ALTER SESSION FORCE PARALLEL DDL parallel 64;
+
+
+10. ReOrg Table WS_SERVER_LOG, ---------- Note : I don't have a partitions thats why  
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+set timing on;
+ALTER TABLE WS_SERVER_LOG MOVE parallel 64;  						-- Because it don't have a Partition
+set timing off;
+
+( if you have a partitioned )
+
+ALTER TABLE IN_MSG MOVE PARTITION MF_ACT PARALLEL 64;
+ALTER TABLE IN_MSG MOVE PARTITION MF_ARC PARALLEL 64;
+ALTER TABLE IN_MSG MOVE PARTITION MF_LIV PARALLEL 64;
+
+11. Index Rebuild 
++++++++++++++++++++
+
+select INDEX_NAME, TABLE_OWNER, TABLE_NAME, UNIQUENESS from ALL_INDEXES WHERE TABLE_NAME = 'WS_SERVER_LOG' and OWNER='CONFIG';
+
+check these above query (step 7).
+
+12 . Cross-Verify 
++++++++++++++++++++
+
+Run (Step:7 and Step : 8)
+
+to cross verify the size and partitions/index 
+
+
+13 . Compile invalid objects
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SPOOL b4_complie.log
+
+SELECT OWNER, OBJECT_NAME,OBJECT_TYPE,STATUS FROM DBA_INVALID_OBJECTS;
+
+SPOOL OFF
+
+---------------Compile inavlids-----------------
+
+BEGIN
+ SYS.PROC_COMPILE_INVALID_OBJECTS;
+END;
+/
+
+SPOOL After_complie.log
+
+SELECT OWNER, OBJECT_NAME,OBJECT_TYPE,STATUS FROM DBA_INVALID_OBJECTS;
+
+SPOOL OFF
+
+
+14 . Drop Restore point
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+select GUARANTEE_FLASHBACK_DATABASE,NAME,to_char(SCN) ,TIME from v$restore_point;
+
+drop restore point DAY1_BEFORE;
+
+select GUARANTEE_FLASHBACK_DATABASE,NAME,to_char(SCN) ,TIME from v$restore_point;
+
+15 . Stop the MRP in DR
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+DGMGRL> connect sys@rpp_p
+DGMGRL> edit database 'RPP_D' set state='APPLY-OFF';
+
+16 . Turn off Flashback
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Prod:
+shut immediate;
+startup mount;
+ALTER DATABASE FLASHBACK OFF;
+alter database open;
+
+DR:
+ALTER DATABASE FLASHBACK OFF;
+shut immediate;
+startup mount;
+
+17 . start the MRP in DR
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+connect sys@rpp_p
+edit database 'RPP_D' set state='APPLY-ON';
+
+Enable the DB Scheduler jobs
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+select job_name, state from dba_scheduler_jobs where owner='CONFIG';
+
+
+execute dbms_scheduler.enable('IMS_MM.JOB_MM_LIVE_TO_ARC');
+execute dbms_scheduler.enable('IMS_MM.JOB_MM_ACT_TO_LIVE');
+
+execute dbms_scheduler.RUN_JOB(job_name => 'IMS_MM.JOB_MM_LIVE_TO_ARC');
+exit;
+
+execute dbms_scheduler.RUN_JOB(job_name => 'IMS_MM.JOB_MM_ACT_TO_LIVE');
+exit;

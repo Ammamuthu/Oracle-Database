@@ -1,0 +1,71 @@
+# 1. Partition the disk /dev/sdc
+fdisk /dev/sdc
+# ▶ Launch the partitioning tool to create new partitions on /dev/sdc.
+# Inside fdisk:
+#   Press 'n' → create new partition
+#   Press 'p' → primary
+#   Choose partition number (e.g., 1–11)
+#   Accept default sectors or customize size (e.g., +100G)
+#   Repeat for each partition you want to use
+#   Press 'w' → write changes and exit
+
+# 2. Inform the OS of new partition table
+partprobe /dev/sdc
+# ▶ Updates the kernel with the new partition table
+
+# 3. Create ASM disks using oracleasm
+oracleasm scandisks
+# ▶ Scan for available disks
+
+oracleasm listdisks
+# ▶ List current ASM disks
+
+# Example of creating ASM disks (assuming /dev/sdc5 and /dev/sdc6)
+oracleasm createdisk DATA1 /dev/sdc5
+oracleasm createdisk DATA2 /dev/sdc6
+# ▶ Creates ASM disks named DATA1 and DATA2
+
+# 4. Scan and verify
+oracleasm scandisks
+oracleasm listdisks
+# ▶ Re-scan and verify that new ASM disks are visible
+
+# 5. In SQL*Plus (connected as SYSASM) or via asmcmd, create disk group
+sqlplus / as sysasm
+
+-- Create disk group in ASM
+CREATE DISKGROUP DATA NORMAL REDUNDANCY
+  DISK 'ORCL:DATA1', 'ORCL:DATA2'
+  ATTRIBUTE 'au_size'='4M';
+
+-- ▶ This creates a new ASM diskgroup named DATA using the ASM disks
+
+-- Verify diskgroup status
+SELECT name, state, type, total_mb, free_mb FROM v$asm_diskgroup;
+
+-- View disks in the group
+SELECT group_number, disk_number, name, path FROM v$asm_disk;
+
+-- Monitor ongoing rebalancing (if any)
+SELECT * FROM v$asm_operation;
+
+-- Adjust rebalance power if needed
+ALTER DISKGROUP DATA REBALANCE POWER 5;
+
+-- Add more disks later if needed
+ALTER DISKGROUP DATA ADD DISK 'ORCL:DATA3';
+
+-- Drop disk if required
+ALTER DISKGROUP DATA DROP DISK DATA1;
+
+-- Rebalance manually if required
+ALTER DISKGROUP DATA REBALANCE;
+
+# 6. Using asmcmd to verify and explore
+asmcmd
+lsdg
+# ▶ List all disk groups
+
+ls +DATA
+# ▶ List files in the DATA diskgroup
+

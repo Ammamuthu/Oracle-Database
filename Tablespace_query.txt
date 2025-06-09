@@ -1,0 +1,86 @@
+ SELECT
+    FILE_NAME,
+TABLESPACE_NAME,
+    AUTOEXTENSIBLE,
+ INCREMENT_BY,
+  MAXBYTES / 1024 / 1024 AS MAX_SIZE_MB,
+    BYTES / 1024 / 1024 AS CURRENT_SIZE_MB
+ FROM
+    DBA_DATA_FILES
+ WHERE
+    TABLESPACE_NAME = 'IMS_MM_DATA';
+	
+	
+	
+	
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/MHPSUT/IMS_MM_DATA99.dbf' AUTOEXTEND ON NEXT 500M;
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/MHPSUT/IMS_MM_DATA04.dbf' AUTOEXTEND ON NEXT 500M;
+ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/MHPSUT/IMS_MM_DATA06.dbf' AUTOEXTEND ON NEXT 500M;
+ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/MHPSUT/IMS_MM_DATA07.dbf' AUTOEXTEND ON NEXT 500M;
+
+--------------------------------------ADDD unlimited size of data file -----------------------------------------------
+ALTER TABLESPACE TRANS_DATA ADD DATAFILE '/u01/app/oracle/datafiles/IMSDEV/TRANS_DATA_01.DBF' SIZE 1G AUTOEXTEND ON NEXT 1G MAXSIZE UNLIMITED;
+
+
+
+------------------------Query for usable Tabls only  --------------------------
+
+SELECT df.tablespace_name "Tablespace",
+       totalusedspace "Used MB",
+       (df.totalspace - tu.totalusedspace) "Free MB",
+       df.totalspace "Total MB",
+       ROUND(100 * ( (df.totalspace - tu.totalusedspace) / df.totalspace)) "% Free"
+FROM
+  (SELECT tablespace_name,
+          ROUND(SUM(bytes) / 1048576) TotalSpace
+   FROM dba_data_files
+   GROUP BY tablespace_name
+  ) df,
+  (SELECT ROUND(SUM(bytes)/(1024*1024)) totalusedspace,
+          tablespace_name
+   FROM dba_segments
+   GROUP BY tablespace_name
+  ) tu
+WHERE df.tablespace_name = tu.tablespace_name;
+
+
+------------------------Query for Non usable Tabls also --------------------------
+
+
+SELECT df.tablespace_name "Tablespace",
+       df.TotalSpace "Total MB",
+       NVL(tu.totalusedspace, 0) "Used MB",
+       (df.TotalSpace - NVL(tu.totalusedspace, 0)) "Free MB",
+       ROUND(100 * ( (df.TotalSpace - NVL(tu.totalusedspace, 0)) / df.TotalSpace)) "% Free"
+FROM
+  (SELECT tablespace_name,
+          ROUND(SUM(bytes) / 1048576) TotalSpace
+   FROM dba_data_files
+   GROUP BY tablespace_name
+  ) df
+LEFT JOIN
+  (SELECT ROUND(SUM(bytes)/(1024*1024)) totalusedspace,
+          tablespace_name
+   FROM dba_segments
+   GROUP BY tablespace_name
+  ) tu
+ON df.tablespace_name = tu.tablespace_name;
+
+
+-----------------------------move a data file ---------------------------------------------------
+
+ALTER DATABASE MOVE DATAFILE '/u01/app/oracle/datafiles/RPPUNT/TRANS_DATA.DBF' TO '/u02/app/oracle/datafiles/RPPUNT/TRANS_DATA.DBF';
+ALTER DATABASE MOVE DATAFILE '/u01/app/oracle/datafiles/RPPUNT/TRANS_DATA02.DBF' TO '/u02/app/oracle/datafiles/RPPUNT/TRANS_DATA02.DBF';
+
+
+----------------------------------ADD TEMP TABLESPACE----------------------------------------------
+
+SELECT TABLESPACE_NAME, FILE_NAME, AUTOEXTENSIBLE
+FROM DBA_TEMP_FILES;
+
+ALTER TABLESPACE TEMP ADD DATAFILE '/u01/app/oracle/datafiles/IMSDEV/TEMP_01.DBF' SIZE 1G AUTOEXTEND ON NEXT 1G MAXSIZE UNLIMITED;
+
+
+Make the default tablespace to Temp
+---------------------------------------
+ ALTER DATABASE DEFAULT TEMPORARY TABLESPACE temp_tbs_name;

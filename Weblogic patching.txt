@@ -8,7 +8,7 @@ tar -pcvf /u01/bkp/TCHQA1_BKP.tar TCHQA1/
 
 2. Move a Patch to Stageing Area
 --------------------------------
-scp p28186730_1394218_Generic.zip p37476502_141100_Generic.zip  imsadmin@192.44.44.44:/u01/bkp/
+scp p28186730_1394218_Generic.zip p37476502_141100_Generic.zip  imsadmin@192.168.222.77:/u01/bkp/
 
 
 unzip OPATCH --unzip p28186730_1394218_Generic.zip
