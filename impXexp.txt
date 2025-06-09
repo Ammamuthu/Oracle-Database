@@ -294,6 +294,7 @@ export ORACLE_SID=DBNAME
 
 select * from dba_directories;              ---> Get the data Pump Directories
 
+grant imp_Full_Database,exp_full_database to TRANS
 
 	**OS Level **
 
