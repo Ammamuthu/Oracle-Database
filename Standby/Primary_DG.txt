@@ -1,0 +1,219 @@
+mkdir -p  D:\ims_ecs\Oracle\fast_recovery_area
+mkdir -p  D:\ims_ecs\Oracle\arch\IMS
+mkdir -p  D:\ims_ecs\Oracle\standby\IMS
+
+sudo chown -R oracle:oinstall D:\ims_ecs\Oracle\fast_recovery_area
+sudo chown -R oracle:oinstall D:\ims_ecs\Oracle\arch\IMS
+sudo chown -R oracle:oinstall D:\ims_ecs\Oracle\standby\IMS
+
+Open Oracle Net Manger:
+-----------------------
+
+IMS_P
+IMS_P_DGB
+IMS_P_DGMGRL
+
+IMS_D
+IMS_D_DGB
+IMS_D_DGMGRL
+
+
+
+(on Primary)        -- add it in Listerner.ora 
+
+SID_LIST_LISTENER = 
+   (SID_LIST = 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS_P) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS_P_DGB) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS_P_DGMGRL) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+   ) 
+  
+  ------- > Restart listener 
+
+Cross Check:
+------------
+sqlplus sys/Ebslabs123@IMS_P as sysdba
+sqlplus sys/Ebslabs123@IMS_P_DGB as sysdba
+sqlplus sys/Ebslabs123@IMS_P_DGMGRL as sysdba
+sqlplus sys/Ebslabs123@IMS_D as sysdba
+sqlplus sys/Ebslabs123@IMS_D_DGB as sysdba
+sqlplus sys/Ebslabs123@IMS_D_DGMGRL as sysdba
+
+
+Primary:
+--------
+
+select name,force_logging,log_mode,flashback_on from v$database; 
+
+shutdown immediate
+startup mount
+
+alter database archivelog;
+ALTER SYSTEM SET DB_RECOVERY_FILE_DEST_SIZE=20G SCOPE=BOTH;
+ALTER SYSTEM SET DB_FLASHBACK_RETENTION_TARGET=7200 SCOPE = BOTH;
+ALTER SYSTEM SET DB_RECOVERY_FILE_DEST = 'D:\ims_ecs\Oracle\fast_recovery_area';
+alter database flashback on;
+
+archive log list;
+select flashback_on from v$database;
+select name,force_logging,log_mode,flashback_on from v$database;
+
+alter database open;
+
+Create pfile='/u01/app/oracle/INITIMSPRD.ora' from spfile;
+
+
+Backup Primary Database:
+----------------------- 
+
+RUN 
+{ 
+  ALLOCATE CHANNEL ch11 TYPE DISK MAXPIECESIZE 10G; 
+  BACKUP 
+  FORMAT 'D:\ims_ecs\Backup\%d_D_%T_%u_s%s_p%p' 
+  DATABASE 
+  CURRENT CONTROLFILE 
+  FORMAT 'D:\ims_ecs\Backup\%d_C_%T_%u' 
+  SPFILE 
+  FORMAT 'D:\ims_ecs\Backup\%d_S_%T_%u' 
+  PLUS ARCHIVELOG 
+  FORMAT 'D:\ims_ecs\Backup\%d_A_%T_%u_s%s_p%p'; 
+  RELEASE CHANNEL ch11; 
+} 
+
+Move the Primary PWD file to Standby  
+-------------------------------------------
+
+ALTER SYSTEM SET db_unique_name='IMS_P' scope=spfile ;
+shu immediate;
+startup;
+ALTER SYSTEM SET FAL_Client='IMS_P' scope=both;
+ALTER SYSTEM SET FAL_Server='IMS_D' scope=both;
+ALTER SYSTEM SET LOG_ARCHIVE_CONFIG='DG_CONFIG=(IMS_P,IMS_D)' scope=both;
+ALTER SYSTEM SET Log_archive_dest_1='LOCATION=D:\ims_ecs\Oracle\arch\IMS VALID_FOR=(ALL_LOGFILES,ALL_ROLES) db_unique_name=IMS_P' scope=both;
+ALTER SYSTEM SET Log_archive_dest_2='Service=IMS_D lgwr sync VALID_FOR=(ALL_LOGFILES,PRIMARY_ROLE) compression=enable db_unique_name=IMS_D' scope=both;
+ALTER SYSTEM SET Log_archive_dest_state_1=ENABLE scope=both;
+ALTER SYSTEM SET Log_archive_dest_state_2=ENABLE scope=both;
+ALTER SYSTEM SET CONTROL_FILE_RECORD_KEEP_TIME=30 scope=both;
+ALTER SYSTEM SET Standby_File_Management='AUTO' scope=both;
+ 
+SELECT NAME, OPEN_MODE, DB_UNIQUE_NAME, DATABASE_ROLE, PROTECTION_MODE FROM V$DATABASE;
+
+SELECT A.GROUP#,A.thread#,A.SEQUENCE#,A.ARCHIVED,A.STATUS,B.MEMBER AS REDOLOG_FILE_NAME,(A.BYTES/1024/1024/1024) AS SIZE_MB 
+from v$log A JOIN v$LOGFILE B ON A.group#=B.group# order by A.GROUP#;
+
+
+Make sure it same as Standby :
+------------------------------
+- redo log and standby creation
+
+alter database add standby logfile group 4 'D:\ims_ecs\Oracle\standby\IMSredo04.log' size 200m;
+alter database add standby logfile group 5 'D:\ims_ecs\Oracle\standby\IMSredo05.log' size 200m; 										   
+alter database add standby logfile group 6 'D:\ims_ecs\Oracle\standby\IMSredo06.log' size 200m; 										   
+alter database add standby logfile group 7 'D:\ims_ecs\Oracle\standby\IMSredo07.log' size 200m;
+
+SELECT GROUP#,THREAD#,SEQUENCE#,ARCHIVED,STATUS FROM V$STANDBY_LOG; 
+
+
+
+
+both Primary and Standby :
+--------------------------
+Alter system set dg_broker_start=True scope=both;
+alter system set LOG_ARCHIVE_DEST_2='' scope=both;
+
+
+select group#,bytes from v$log;
+select group#,thread#,bytes,status from v$standby_log;
+ 
+
+
+****				Connect DGMGRL						****
+
+DGMGRL> connect sys
+Password:
+Connected to "IMS_P"
+Connected as SYSDBA.
+
+-----------------------------------------------
+Pre Requesties 
+
+****	DB Level	****
+
+show parameter dg_broker_start
+alter system set dg_broker_start=true scope=Both;
+
+show parameter log_archive_dest_2;									(Take a Note /Once done with DGMGRL change back to normal)
+alter system set log_archive_dest_2='' scope=both;     
+
+-----------------------------------------------
+
+1.)  Create a Configuration on Primary Database 
+
+CREATE CONFIGURATION 'IMS' AS PRIMARY DATABASE IS 'IMS_P' CONNECT IDENTIFIER IS 'IMS_P';
+
+2.) Add a Standby DATABASE 
+
+ADD DATABASE 'IMS_D' AS CONNECT IDENTIFIER IS 'IMS_D' MAINTAINED AS PHYSICAL;
+
+3.)  Start the Configuration 
+
+ENABLE CONFIGURATION;
+
+****      Run it in a DGMGRL     ****
+
+EDIT DATABASE 'IMS_P' set state='TRANSPORT-ON';
+EDIT DATABASE 'IMS_D' set state='APPLY-ON';
+EDIT DATABASE 'IMS_P' set PROPERTY 'TransportDisconnectedThreshold'=0;
+EDIT DATABASE 'IMS_D' SET PROPERTY 'TransportDisconnectedThreshold'=0;
+EDIT DATABASE 'IMS_P'SET PROPERTY 'LogXptMode'='SYNC';
+EDIT DATABASE 'IMS_D' SET PROPERTY 'LogXptMode'='SYNC';
+EDIT DATABASE 'IMS_P'SET PROPERTY 'REDOCOMPRESSION'='ENABLE';
+EDIT DATABASE 'IMS_D' SET PROPERTY 'REDOCOMPRESSION'='ENABLE';
+EDIT CONFIGURATION SET PROTECTION MODE AS MAXPERFORMANCE;
+EDIT DATABASE 'IMS_P' SET PROPERTY 'ArchiveLagTarget'=1200;
+EDIT DATABASE 'IMS_P' SET PROPERTY 'LogArchiveMaxProcesses'=10;
+EDIT DATABASE 'IMS_P' SET PROPERTY 'LogArchiveMinSucceedDest'=1;
+EDIT DATABASE 'IMS_D' SET PROPERTY 'ArchiveLagTarget'=1200;
+EDIT DATABASE 'IMS_D' SET PROPERTY 'LogArchiveMaxProcesses'=10;
+EDIT DATABASE 'IMS_D' SET PROPERTY 'LogArchiveMinSucceedDest'=1;
+
+
+cmd's To check in on DGMGRL
+----------------------------------------
+show Configuration
+show database IMS_P
+show database IMS_d
+show database verbose IMS_P
+show database verbose IMS_D
+
+
+using this also we can start and stop sync :
+--------------------------------------------
+ 
+EDIT DATABASE 'IMS_P' set state='TRANSPORT-OFF';
+EDIT DATABASE 'IMS_D' set state='APPLY-OFF';
+
+Primary:
+--------
+ALTER SYSTEM SET Log_archive_dest_2='Service=IMS_D lgwr sync VALID_FOR=(ALL_LOGFILES,PRIMARY_ROLE) compression=enable db_unique_name=IMS_D' scope=both;
+
+select group#,count(*) as member_Count from v$logfile group by group#;
+ALTER DATABASE ADD LOGFILE GROUP 1 ('+DATA','+FRA') SIZE 2048M;

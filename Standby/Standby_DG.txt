@@ -1,0 +1,171 @@
+mkdir -p  D:\ims_ecs\Oracle\fast_recovery_area
+mkdir -p  D:\ims_ecs\Oracle\arch\IMS
+mkdir -p  D:\ims_ecs\Oracle\standby\IMS
+
+sudo chown -R oracle:oinstall D:\ims_ecs\Oracle\fast_recovery_area
+sudo chown -R oracle:oinstall D:\ims_ecs\Oracle\arch\IMS
+sudo chown -R oracle:oinstall D:\ims_ecs\Oracle\standby\IMS\
+
+
+Open Oracle Net Manger:
+-----------------------
+
+IMS_P
+IMS_P_DGB
+IMS_P_DGMGRL
+
+IMS_D
+IMS_D_DGB
+IMS_D_DGMGRL
+
+
+
+(on standby)        -- add it in Listerner.ora 
+
+SID_LIST_LISTENER = 
+   (SID_LIST = 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS_D) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS_D_DGB) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+     (SID_DESC = 
+       (GLOBAL_DBNAME = IMS_D_DGMGRL) 
+       (ORACLE_HOME = D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home) 
+       (SID_NAME = IMS) 
+     ) 
+   ) 
+  
+  ------- > Restart listener 
+
+Cross Check:
+------------
+sqlplus sys/Ebslabs123@IMS_P as sysdba
+sqlplus sys/Ebslabs123@IMS_P_DGB as sysdba
+sqlplus sys/Ebslabs123@IMS_P_DGMGRL as sysdba
+sqlplus sys/Ebslabs123@IMS_D as sysdba
+sqlplus sys/Ebslabs123@IMS_D_DGB as sysdba
+sqlplus sys/Ebslabs123@IMS_D_DGMGRL as sysdba
+
+
+Standby:
+--------
+
+select name,force_logging,log_mode,flashback_on from v$database; 
+
+shutdown immediate
+startup mount
+
+alter database archivelog;
+ALTER SYSTEM SET DB_RECOVERY_FILE_DEST_SIZE=20G SCOPE=BOTH;
+ALTER SYSTEM SET DB_FLASHBACK_RETENTION_TARGET=7200 SCOPE = BOTH;
+ALTER SYSTEM SET DB_RECOVERY_FILE_DEST = 'D:\ims_ecs\Oracle\fast_recovery_area';
+alter database flashback on;
+
+archive log list;
+select flashback_on from v$database;
+select name,force_logging,log_mode,flashback_on from v$database;
+ 
+Create pfile='D:\ims_ecs\Oracle\WINDOWS.X64_193000_db_home\database\INITIMSDR.ora' from spfile;
+
+ 
+ALTER SYSTEM SET db_unique_name='IMS_D' scope=spfile;
+
+shut immediate;
+startup mount
+
+
+ALTER SYSTEM SET FAL_Client='IMS_D' scope=both;
+ALTER SYSTEM SET FAL_Server='IMS_P' scope=both;
+ALTER SYSTEM SET LOG_ARCHIVE_CONFIG='DG_CONFIG=(IMS_P,IMS_D)' scope=both;
+ALTER SYSTEM SET Log_archive_dest_1='LOCATION=D:\ims_ecs\Oracle\arch\IMS VALID_FOR=(ALL_LOGFILES,ALL_ROLES) db_unique_name=IMS_D' scope=both;
+ALTER SYSTEM SET Log_archive_dest_2='Service=IMS_P lgwr sync VALID_FOR=(ALL_LOGFILES,PRIMARY_ROLE) compression=enable db_unique_name=IMS_P' scope=both;
+ALTER SYSTEM SET Log_archive_dest_state_1=ENABLE scope=both;
+ALTER SYSTEM SET Log_archive_dest_state_2=ENABLE scope=both;
+ALTER SYSTEM SET Service_names='IMS_D' scope=both;
+ALTER SYSTEM SET CONTROL_FILE_RECORD_KEEP_TIME=30 scope=both;
+ALTER SYSTEM SET Standby_File_Management='AUTO' scope=both;
+
+SELECT NAME, OPEN_MODE, DB_UNIQUE_NAME, DATABASE_ROLE, PROTECTION_MODE FROM V$DATABASE;
+
+- redo log and standby creation
+
+alter database add standby logfile group 4 'D:\ims_ecs\Oracle\standby\IMS\redo04.log' size 200m;
+alter database add standby logfile group 5 'D:\ims_ecs\Oracle\standby\IMS\redo05.log' size 200m; 										   
+alter database add standby logfile group 6 'D:\ims_ecs\Oracle\standby\IMS\redo06.log' size 200m; 										   
+alter database add standby logfile group 7 'D:\ims_ecs\Oracle\standby\IMS\redo07.log' size 200m;
+
+SELECT GROUP#,THREAD#,SEQUENCE#,ARCHIVED,STATUS FROM V$STANDBY_LOG; 
+
+
+SELECT A.GROUP#,A.thread#,A.SEQUENCE#,A.ARCHIVED,A.STATUS,B.MEMBER AS REDOLOG_FILE_NAME,(A.BYTES/1024/1024/1024) AS SIZE_MB 
+from v$log A JOIN v$LOGFILE B ON A.group#=B.group# order by A.GROUP#;
+
+
+**DR** Server
+
+RESTORE PRIMARY DATABASE and Password Move :
+-------------------------------------------
+
+restore standby controlfile from 'D:\ims_ecs\Backup\IMS_C_20250319_053kong2';
+ 
+catalog backuppiece 'D:\ims_ecs\Backup\o1_mf_nnndf_TAG20250317T102227_mxhbnd2m_.bkp';
+catalog backuppiece 'D:\ims_ecs\Backup\IMS_A_20250319_073kong5_s7_p1';
+catalog backuppiece 'D:\ims_ecs\Backup\IMS_D_20250319_023konf0_s2_p1';
+catalog backuppiece 'D:\ims_ecs\Backup\IMS_D_20250319_033konfg_s3_p1';
+catalog backuppiece 'D:\ims_ecs\Backup\IMS_D_20250319_043konfj_s4_p1';
+catalog backuppiece 'D:\ims_ecs\Backup\IMS_A_20250319_013konet_s1_p1';
+ 
+ restore database;
+ recover database;
+-------------------------------------------------
+
+
+alter database recover managed_standby database disconnect from session;
+
+select name,open_mode from v$database;
+
+SELECT process, status, thread#, sequence#, block#, blocks
+FROM gv$managed_standby
+WHERE process IN ('RFS', 'LNS', 'MRP0');
+
+--It should give a Active status on standby
+-------------------------------------------
+SELECT GROUP#,THREAD#,SEQUENCE#,ARCHIVED,STATUS FROM V$STANDBY_LOG; 
+
+
+both Primary and Standby :
+--------------------------
+Alter system set dg_broker_start=True scope=both;
+alter system set LOG_ARCHIVE_DEST_2='' scope=both;
+
+
+
+cmd's To check in on DGMGRL
+----------------------------------------
+show Configuration
+show database IMS_P
+show database IMS_d
+show database verbose IMS_P
+show database verbose IMS_D
+
+Standby:
+--------
+ALTER SYSTEM SET Log_archive_dest_2='Service=IMS_P lgwr sync VALID_FOR=(ALL_LOGFILES,PRIMARY_ROLE) compression=enable db_unique_name=IMS_P' scope=both;
+
+
+In DR
+-------
+Check Flashback is on or not after activity
+
+select name,force_logging,log_mode,flashback_on from v$database; 
