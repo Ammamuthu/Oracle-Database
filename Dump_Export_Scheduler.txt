@@ -1,0 +1,60 @@
+-----Dump export Code with DB name--------
+
+DECLARE
+	dt VARCHAR2(100);
+    fname VARCHAR2(100);
+	logfile    VARCHAR2(100);  
+    handle NUMBER;
+    schema_expr VARCHAR2(4000);
+BEGIN
+	dt := MOD(TO_CHAR(SYSDATE, 'ddd'), 3); 
+    fname := LOWER(SYS_CONTEXT('USERENV', 'DB_NAME')) || '_' || dt || '.dmp';
+
+    SELECT 'IN(' || LISTAGG( '''' || username || '''', ',' ) WITHIN GROUP (ORDER BY username) || ')'
+    INTO schema_expr
+    FROM dba_users
+    WHERE oracle_maintained = 'N';  
+
+    -- Step 3: Start datapump export
+    handle := DBMS_DATAPUMP.OPEN('EXPORT', 'SCHEMA');
+    DBMS_DATAPUMP.ADD_FILE(handle, fname,directory => 'DATA_PUMP_DIR' , reusefile => 1);
+	DBMS_DATAPUMP.ADD_FILE(handle, logfile, directory => 'DATA_PUMP_DIR', filetype => DBMS_DATAPUMP.KU$_FILE_TYPE_LOG_FILE, reusefile => 1);
+    DBMS_DATAPUMP.METADATA_FILTER(handle, 'SCHEMA_EXPR', schema_expr);
+    DBMS_DATAPUMP.SET_PARALLEL(handle, 1);
+    DBMS_DATAPUMP.SET_PARAMETER(handle => handle, name => 'compression', value => 'ALL');
+    DBMS_DATAPUMP.START_JOB(handle);
+    DBMS_DATAPUMP.DETACH(handle);
+
+END;
+
+-----JOB sceduler ------------
+
+BEGIN
+  DBMS_SCHEDULER.CREATE_JOB (
+    job_name        => 'JOB_IMS_EXP',
+    job_type        => 'PLSQL_BLOCK',
+    job_action      => q'[
+      ----Your PLSQL CODDE -----
+    ]',
+    start_date      => SYSTIMESTAMP,  -- Start immediately
+    repeat_interval => 'FREQ=DAILY; BYHOUR=21',  -- Daily at 9 PM
+    enabled         => TRUE,
+    comments        => 'Daily schema export to DPUMP_DIR1 at 9 PM');
+END;
+/
+
+
+---Manual Run---
+    
+BEGIN
+    DBMS_SCHEDULER.RUN_JOB('JOB_IMS_EXP');
+END;
+/
+
+-----Job details------
+
+-- View job run history
+SELECT job_name, status, actual_start_date, run_duration
+FROM dba_scheduler_job_run_details
+WHERE job_name = 'JOB_IMS_EXP'
+ORDER BY log_date DESC;

@@ -8,18 +8,16 @@ TABLESPACE_NAME,
  FROM
     DBA_DATA_FILES
  WHERE
-    TABLESPACE_NAME = 'IMS_MM_DATA';
+    TABLESPACE_NAME = 'TRANS_DATA';
 	
-	
-	
-	
-ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/MHPSUT/IMS_MM_DATA99.dbf' AUTOEXTEND ON NEXT 500M;
+		
+ALTER DATABASE DATAFILE '/u01/app/oracle/datafiles/MHPSUT/TRANS_DATA_01.DBF' AUTOEXTEND ON NEXT 500M;
 ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/MHPSUT/IMS_MM_DATA04.dbf' AUTOEXTEND ON NEXT 500M;
 ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/MHPSUT/IMS_MM_DATA06.dbf' AUTOEXTEND ON NEXT 500M;
 ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/MHPSUT/IMS_MM_DATA07.dbf' AUTOEXTEND ON NEXT 500M;
 
 --------------------------------------ADDD unlimited size of data file -----------------------------------------------
-ALTER TABLESPACE TRANS_DATA ADD DATAFILE '/u01/app/oracle/datafiles/IMSDEV/TRANS_DATA_01.DBF' SIZE 1G AUTOEXTEND ON NEXT 1G MAXSIZE UNLIMITED;
+ALTER TABLESPACE TRANS_DATA ADD DATAFILE '/u01/app/oracle/datafiles/SRAUT/TRANS_DATA_01.DBF' SIZE 10m AUTOEXTEND ON NEXT 10m MAXSIZE UNLIMITED;
 
 
 
@@ -67,20 +65,204 @@ LEFT JOIN
 ON df.tablespace_name = tu.tablespace_name;
 
 
+------------------------Percen % Query Show -----------------------
+Set pages 999 lines 999
+SELECT * FROM (SELECT TABLESPACE_NAME, SUM(USED_SPACE) USED_SIZE, SUM(TOTAL_SPACE) DATAFILES_MAX_SIZE, SUM(AVALIABLE_SPACE) AVALIABLE_SPACE,
+ROUND ( (SUM(USED_SPACE) * 100) / SUM(TOTAL_SPACE)) || '%' USED_SIZE_PCT
+FROM (
+SELECT TABLESPACE_NAME,
+                   ROUND (BYTES / 1024 / 1024 / 1024, 2) AS USED_SPACE,
+                   ROUND (MAXBYTES / 1024 / 1024 / 1024, 2) AS TOTAL_SPACE,
+                   ROUND ((MAXBYTES - BYTES) / 1024 / 1024 / 1024, 2)
+                      AS AVALIABLE_SPACE
+              FROM DBA_DATA_FILES where AUTOEXTENSIBLE = 'YES'
+union all              
+SELECT TABLESPACE_NAME,
+                   ROUND (BYTES / 1024 / 1024 / 1024, 2) AS USED_SPACE,
+                   ROUND (BYTES / 1024 / 1024 / 1024, 2) AS TOTAL_SPACE,
+                   ROUND ((BYTES - BYTES) / 1024 / 1024 / 1024, 2)
+                      AS AVALIABLE_SPACE
+              FROM DBA_DATA_FILES where AUTOEXTENSIBLE = 'NO')
+GROUP BY TABLESPACE_NAME)
+   WHERE USED_SIZE > 1;
+ 
 -----------------------------move a data file ---------------------------------------------------
 
-ALTER DATABASE MOVE DATAFILE '/u01/app/oracle/datafiles/RPPUNT/TRANS_DATA.DBF' TO '/u02/app/oracle/datafiles/RPPUNT/TRANS_DATA.DBF';
-ALTER DATABASE MOVE DATAFILE '/u01/app/oracle/datafiles/RPPUNT/TRANS_DATA02.DBF' TO '/u02/app/oracle/datafiles/RPPUNT/TRANS_DATA02.DBF';
+ALTER DATABASE MOVE DATAFILE '/u01/app/oracle/datafiles/MHPS/TRANS_DATA02.dbf' TO '/u02/app/oracle/datafiles/MHPS/TRANS_DATA02.dbf';
 
+ALTER DATABASE MOVE DATAFILE '/home/oracle/MHPS_DATAFILES/IMS_MM_DATA03.dbf' TO '/u02/app/oracle/datafiles/MHPS/IMS_MM_DATA03.dbf';
 
-----------------------------------ADD TEMP TABLESPACE----------------------------------------------
+---------------------------------ADD TEMP TABLESPACE----------------------------------------------
 
 SELECT TABLESPACE_NAME, FILE_NAME, AUTOEXTENSIBLE
 FROM DBA_TEMP_FILES;
 
 ALTER TABLESPACE TEMP ADD DATAFILE '/u01/app/oracle/datafiles/IMSDEV/TEMP_01.DBF' SIZE 1G AUTOEXTEND ON NEXT 1G MAXSIZE UNLIMITED;
 
+or 
+
+-------------------------------CREATE A NEW TEMP_TBS-------------------------------------------------
+                               =====================
+
+
+CREATE TEMPORARY TABLESPACE temp_new
+TEMPFILE '/u01/app/oracle/oradata/SRAUT/temp_new_01.dbf'
+SIZE 1G
+AUTOEXTEND ON NEXT 1G MAXSIZE UNLIMITED;
+
 
 Make the default tablespace to Temp
 ---------------------------------------
- ALTER DATABASE DEFAULT TEMPORARY TABLESPACE temp_tbs_name;
+ALTER DATABASE DEFAULT TEMPORARY TABLESPACE temp_new;
+
+DELETE OLD TBS if no need :
+----------------------------
+DROP TABLESPACE temp INCLUDING CONTENTS AND DATAFILES;
+
+Rename to old name:
+-------------------
+ALTER TABLESPACE temp_new RENAME TO temp;
+
+
+
+Try to Re-Create the temp data file
+-------------------------------------
+ALTER DATABASE TEMPFILE 'D:\IMS_ECS\ORACLE_19C\ORADATA\SWIFTGPI\TEMP01.DBF' DROP;
+
+
+ALTER TABLESPACE TEMP ADD TEMPFILE 'D:\IMS_ECS\ORACLE_19C\ORADATA\SWIFTGPI\TEMP01.DBF' SIZE 500M REUSE AUTOEXTEND ON;
+
+
+
+DROP A ENTIRE TABLESPACE
+------------------------
+DROP TABLESPACE IMS_TABLES_DATA INCLUDING CONTENTS AND DATAFILES;
+
+
+drop a particular file on TBS
+------------------------------
+ALTER TABLESPACE my_tablespace DROP DATAFILE '...dbf' INCLUDING CONTENTS;
+
+
+
+--------------------------------------------Resize Redo Log Online -----------------------------------------
+                                            =======================
+
+SELECT g.group#, g.member, l.bytes/1024/1024 AS "Size_MB", l.status
+FROM v$log l, v$logfile g
+WHERE l.group# = g.group#
+ORDER BY 1, 2;
+
+
+Add a new Redo log -> with Mirrored
+----------------------------------- 
+
+ALTER DATABASE ADD LOGFILE GROUP 4 
+('/u01/app/oracle/oradata/RPPPRD/redo04.log',
+ '/u01/app/oracle/oradata/RPPPRD/mirrorlog/mirrorlog4.log')
+SIZE 250M;
+
+ALTER DATABASE ADD LOGFILE GROUP 5 
+('/u01/app/oracle/oradata/RPPPRD/redo05.log',
+ '/u01/app/oracle/oradata/RPPPRD/mirrorlog/mirrorlog5.log')
+SIZE 250M;
+
+ALTER DATABASE ADD LOGFILE GROUP 6 
+('/u01/app/oracle/oradata/RPPPRD/redo06.log',
+ '/u01/app/oracle/oradata/RPPPRD/mirrorlog/mirrorlog6.log')
+SIZE 250M;
+
+
+
+Drop the Old redo files    - if it 'inactive' 
+-----------------------
+
+check  -> SELECT GROUP#, STATUS, ARCHIVED FROM V$LOG;
+
+
+ALTER DATABASE DROP LOGFILE GROUP 1;
+
+
+if not became incative 
+----------------------
+
+Alter system switch logfile;
+
+or
+
+alter system checkpoint ; Active -> Inactive
+
+
+
+
+-----------------------------------------------Resize Query for Aut-Extensable On TBS------------------------------------------------
+                                               =======================================
+
+
+set linesize 1000 pagesize 0 feedback off trimspool on
+with
+ hwm as (
+  -- get highest block id from each datafiles ( from x$ktfbue as we don't need all joins from dba_extents )
+  select /*+ materialize */ ktfbuesegtsn ts#,ktfbuefno relative_fno,max(ktfbuebno+ktfbueblks-1) hwm_blocks
+  from sys.x$ktfbue group by ktfbuefno,ktfbuesegtsn
+ ),
+ hwmts as (
+  -- join ts# with tablespace_name
+  select name tablespace_name,relative_fno,hwm_blocks
+  from hwm join v$tablespace using(ts#)
+ ),
+ hwmdf as (
+  -- join with datafiles, put 5M minimum for datafiles with no extents
+  select file_name,nvl(hwm_blocks*(bytes/blocks),5*1024*1024) hwm_bytes,bytes,autoextensible,maxbytes
+  from hwmts right join dba_data_files using(tablespace_name,relative_fno)
+ )
+select
+ case when autoextensible='YES' and maxbytes>=bytes
+ then -- we generate resize statements only if autoextensible can grow back to current size
+  '/* reclaim '||to_char(ceil((bytes-hwm_bytes)/1024/1024),999999)
+   ||'M from '||to_char(ceil(bytes/1024/1024),999999)||'M */ '
+   ||'alter database datafile '''||file_name||''' resize '||ceil(hwm_bytes/1024/1024)||'M;'
+ else -- generate only a comment when autoextensible is off
+  '/* reclaim '||to_char(ceil((bytes-hwm_bytes)/1024/1024),999999)
+   ||'M from '||to_char(ceil(bytes/1024/1024),999999)
+   ||'M after setting autoextensible maxsize higher than current size for file '
+   || file_name||' */'
+ end SQL
+from hwmdf
+where
+ bytes-hwm_bytes>1024*1024 -- resize only if at least 1MB can be reclaimed
+order by bytes-hwm_bytes desc
+/
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Extract Source TBS list 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT 
+    CASE 
+        WHEN rn = 1 THEN
+            'CREATE TABLESPACE ' || tablespace_name || CHR(10) ||
+            'DATAFILE ''' || file_name || ''' SIZE 10M AUTOEXTEND ON NEXT 10M MAXSIZE UNLIMITED' || CHR(10) ||
+            'EXTENT MANAGEMENT LOCAL' || CHR(10) ||
+            'SEGMENT SPACE MANAGEMENT AUTO;'
+        ELSE
+            'ALTER TABLESPACE ' || tablespace_name || 
+            ' ADD DATAFILE ''' || file_name || 
+            ''' SIZE 10M AUTOEXTEND ON NEXT 10M MAXSIZE UNLIMITED;'
+    END AS tbs_sql
+FROM (
+    SELECT 
+        df.tablespace_name,
+        df.file_name,
+        ROW_NUMBER() OVER (PARTITION BY df.tablespace_name ORDER BY df.file_name) rn
+    FROM 
+        dba_data_files df
+    JOIN 
+        dba_tablespaces ts 
+        ON df.tablespace_name = ts.tablespace_name
+    WHERE 
+        ts.contents = 'PERMANENT'
+        AND ts.tablespace_name NOT IN ('SYSTEM', 'SYSAUX', 'UNDOTBS1', 'TEMP')
+)
+ORDER BY tablespace_name, rn;

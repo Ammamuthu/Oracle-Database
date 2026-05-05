@@ -1,0 +1,128 @@
+FOR PRIMARY :
+-------------
+SELECT MAX(SEQUENCE#) FROM V$LOG_HISTORY;
+
+
+-----Current log sequence --------------
+
+select thread#, max(sequence#) "Last Primary Seq Generated" from v$archived_log val, v$database vdb 
+where val.resetlogs_change# = vdb.resetlogs_change# group by thread# order by 1;
+
+
+FOR STANDBY;
+-------------
+SELECT MAX(SEQUENCE#) FROM V$ARCHIVED_LOG WHERE APPLIED='YES';
+
+
+-------- How many log's were recived on standby --------------
+
+select thread#, max(sequence#) "Last Standby Seq Received" from v$archived_log val, v$database vdb  
+where val.resetlogs_change# = vdb.resetlogs_change# group by thread# order by 1;
+
+-------- How many log's were applied on standby---------------
+
+select thread#, max(sequence#) "Last Standby Seq Applied" from v$archived_log val, v$database vdb 
+where val.resetlogs_change# = vdb.resetlogs_change# and val.applied in ('YES','IN-MEMORY') group by thread# order by 1; 
+
+
+MRP RUNNING or NOT !
+--------------------
+SELECT process, status, sequence# FROM v$managed_standby;
+
+IF ANY ERROR :
+--------------
+set pages 999 lines 999
+COL dest_name For A20;
+COL STATUS FOR A20;
+COL DESTINATION FOR A20;
+col ERROR for a20;
+SELECT dest_name, status, destination,error FROM v$archive_dest;
+
+
+SYNC STATUS ON COMMON :
+-----------------------
+SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", 
+(ARCH.SEQUENCE#-APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM GV$ARCHIVED_LOG 
+WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM GV$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,
+(SELECT THREAD# ,SEQUENCE# FROM GV$LOG_HISTORY WHERE (THREAD#,FIRST_TIME) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM 
+GV$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD#=APPL.THREAD# ORDER BY 1;
+
+
+(quick but not realtime/ sometimes)
+
+SELECT b.last_seq prmy_last_file,
+      a.applied_seq stdby_last_file ,TO_CHAR (a.latest_apply_time, 'dd/mm/yyyy hh24:mi:ss') stdby_latest_time
+ FROM (SELECT   resetlogs_id, thread#, MAX (sequence#) applied_seq, MAX (next_time) latest_apply_time
+           FROM v$archived_log
+          WHERE applied = 'YES'
+       GROUP BY resetlogs_id, thread#) a,
+      (SELECT   resetlogs_id, thread#, MAX (sequence#) last_seq
+           FROM v$archived_log
+       GROUP BY resetlogs_id, thread#) b
+WHERE a.thread# = b.thread#
+ORDER BY a.thread#;
+
+
+START MRP :
+----------
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
+
+STOP MRP :
+----------
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE CANCEL;
+
+
+start the LOG SHIPPING :
+----------------------
+alter system set log_archive_dest_2=ENABLE scope=Both;
+
+start the LOG SHIPPING :
+----------------------
+alter system set log_archive_dest_2=DEFER scope=both;
+
+
+------------------------------------------------------------------------------------------
+DGMGRL 
+======
+DGMGRL> connect sys
+Password:
+Connected to "IMS_P"
+Connected as SYSDBA.
+
+
+show Configuration
+show database IMS_P
+show database IMS_d
+show database verbose IMS_P
+show database verbose IMS_D
+
+
+STARTING the SHIPPING & APPLYING :
+----------------------------------
+EDIT DATABASE 'IMS_P' set state='TRANSPORT-ON';		(primary db name)
+EDIT DATABASE 'IMS_D' set state='APPLY-ON';			(standby db name)
+
+STOPPING the SHIPPING & APPLYING :
+---------------------------------
+EDIT DATABASE 'IMS_P' set state='TRANSPORT-OFF';    (primary db name)
+EDIT DATABASE 'IMS_D' set state='APPLY-OFF';		(standby db name)
+
+------------------------------------------------------------------------------------------
+rman cmd' :
+===========
+
+RMAN TARGET /
+
+OR 
+
+rman
+connect target sys/eBSLABS123
+
+Delete archive log;
+-------------------
+delete noprompt archivelog all completed before 'sysdate-3';
+
+or
+
+delete archivelog until time 'SYSDATE-24/1'
+ 

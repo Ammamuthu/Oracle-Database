@@ -1,0 +1,136 @@
+ORACLE 19c WALLET CONFIGURATION (WINDOWS 11)
+
+Purpose
+Configure Secure External Password Store so SQL*Plus and Data Guard Broker can connect without typing passwords.
+
+---------------------------------------------------------------------------------------------------------------------
+
+STEP 1 – Create Wallet Directory
+--------------------------------
+
+Open Command Prompt as Administrator.
+
+Create wallet folder:
+
+mkdir %ORACLE_HOME%\network\admin\wallet
+
+
+STEP 2 – Create Wallet
+----------------------
+
+cd %ORACLE_HOME%\bin
+
+mkstore -wrl %ORACLE_HOME%\network\admin\wallet -create
+
+You will be prompted for a wallet password.
+
+
+STEP 3 – Store Database Credentials
+------------------------------------
+
+mkstore -wrl %ORACLE_HOME%\network\admin\wallet -createCredential ORCL sys MyPassword
+
+Where:
+
+ORCL        = Oracle service name
+sys         = database username
+MyPassword  = database password
+
+
+STEP 4 – Configure sqlnet.ora
+-----------------------------
+
+Edit file:
+
+%ORACLE_HOME%\network\admin\sqlnet.ora
+
+Add the following:
+
+WALLET_LOCATION =
+(SOURCE =
+(METHOD = FILE)
+(METHOD_DATA =
+(DIRECTORY = %ORACLE_HOME%\network\admin\wallet)
+)
+)
+
+SQLNET.WALLET_OVERRIDE = TRUE
+
+
+STEP 5 – Configure tnsnames.ora
+-------------------------------
+
+Edit file:
+
+%ORACLE_HOME%\network\admin\tnsnames.ora
+
+Example entry:
+
+ORCL =
+(DESCRIPTION =
+(ADDRESS = (PROTOCOL = TCP)(HOST = localhost)(PORT = 1521))
+(CONNECT_DATA =
+(SERVICE_NAME = IMS)
+)
+)
+
+STEP 6 – Verify Wallet Files
+----------------------------
+
+Check wallet directory:
+
+%ORACLE_HOME%\network\admin\wallet
+
+Expected files:
+
+ewallet.p12
+cwallet.sso
+
+
+STEP 7 – List Wallet Credentials
+--------------------------------
+
+mkstore -wrl %ORACLE_HOME%\network\admin\wallet -listCredential
+
+Example output:
+---------------
+1: ORCL sys
+
+
+STEP 8 – Test SQL*Plus Connection
+---------------------------------
+
+sqlplus /@ORCL as sysdba
+
+
+STEP 9 – Test Data Guard Broker
+-------------------------------
+
+dgmgrl /@ORCL
+
+
+STEP 10 – Test TNS Connection
+-----------------------------
+
+tnsping ORCL
+
+
+STEP 11 – Troubleshooting
+-------------------------
+
+If connection fails:
+
+1. Verify listener
+
+   lsnrctl status
+
+2. Verify service name
+
+   SELECT value FROM v$parameter WHERE name='service_names';
+
+3. Verify wallet credentials
+
+   mkstore -wrl %ORACLE_HOME%\network\admin\wallet -listCredential
+
+
+CONFIGURATION COMPLETE

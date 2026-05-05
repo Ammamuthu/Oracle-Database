@@ -1,0 +1,165 @@
+----INCREMENTAL BACKUP USING SCN -----
+
+rman target / log D:\backup\rman_for_standby.log
+
+
+run {
+allocate channel ch1 type disk;
+allocate channel ch2 type disk;
+allocate channel ch3 type disk;
+BACKUP AS COMPRESSED BACKUPSET INCREMENTAL FROM SCN 2314308634 DATABASE FORMAT 'D:\backup\ForStandby_%U' TAG 'FORSTANDBY';
+ALTER DATABASE CREATE STANDBY CONTROLFILE AS 'D:\backup\FORSTANDBYCTRL.BCK';
+release channel ch1;
+release channel ch2;
+release channel ch3;
+}
+
+
+----INCREMENTAL RECOVERY USING SCN-----
+
+
+rman target / log D:\backup\rman_for_target_standby.log
+
+restore controlfile from 'D:\backup\backup\backup\FORSTANDBYCTRL.BCK';
+ALTER DATABASE MOUNT;
+catalog start with 'D:\backup\backup\backup\';
+{{ OR }}
+catalog backuppiece 'D:\backup\backup\backup\FORSTANDBY_0A43FK9S_1_1';
+list backup summary;
+recover database noredo;
+
+
+
+SQL> ALTER DATABASE RECOVER MANAGED STANDBY DATABASE USING CURRENT LOGFILE DISCONNECT;
+
+
+SQL > SELECT sequence#, first_time, next_time, applied FROM v$archived_log ORDER BY sequence#;
+
+
+ALTER DATABASE REGISTER LOGFILE 'D:\IMS_ECS\IMS\ORACLE\arch\IMS\ARC0000178188_1032596017.0001';
+
+
+
+---------------------------------------------------
+After changing DR DB in nomount state.
+ 
+From Dr db connect with auxilary database as
+ 
+rman TARGET sys@IMS_P AUXILIARY sys@IMS_D
+ 
+run{
+  DUPLICATE TARGET DATABASE
+  FOR STANDBY
+  FROM ACTIVE DATABASE
+  NOFILENAMECHECK;
+  }
+
+------------------------------------------------------------
+{{ if path change }}
+
+create pfile from spfile;
+vi init.ora 
+db_file_name_convert = ('/u01/app/oracle/oradata/IMSDEV/','/u01/app/oracle/oradata/IMSDEV/',
+                        '/u01/app/oracle/datafiles/IMSDEV/','/u01/app/oracle/datafiles/IMSDEV/')
+log_file_name_convert = ('/u01/app/oracle/oradata/IMSDEV/','/u01/app/oracle/oradata/IMSDEV/',
+                         '/u01/app/oracle/datafiles/IMSDEV/','/u01/app/oracle/datafiles/IMSDEV/')
+
+startup nomount pfile='init.ora'
+
+
+-----------------------------------------------------------------------------
+(USING SPFILE)
+
+startup nomount;
+
+ ALTER SYSTEM  SET log_file_name_convert =
+(
+ '+DATA/SRA/ONLINELOG/', '/u01/app/oracle/oradata/SRAUT/',
+ '+FRA/SRA/ONLINELOG/',  '/u01/app/oracle/oradata/SRAUT/mirrorlog/'
+) SCOPE=SPFILE;
+
+ALTER SYSTEM SET db_file_name_convert=
+'+DATA/SRA/DATAFILE/', '/u01/app/oracle/datafiles/SRAUT/'
+SCOPE=SPFILE;
+
+
+shut immediate;
+startup nomount;
+
+
+
+ 
+>> duplicate command
+
+-----------------------------------------------
+
+rman target / log="D:\STG3_RMAN_ERP11\DB_REFRESH_STG3_TO_ERP11_SALES_REPORT_ERROR.log"
+
+run {
+allocate channel c1 type disk;
+allocate channel c2 type disk;
+allocate channel c3 type disk;
+allocate channel c4 type disk;
+allocate channel c5 type disk;
+allocate channel c6 type disk;
+allocate channel c7 type disk;
+BACKUP as compressed backupset FULL FILESPERSET 10 FORMAT '/u01/app/oracle/Backup/IMSDEV_D_%s_%p_%t_%d.bak' DATABASE;
+BACKUP as compressed backupset filesperset 10 FORMAT '/u01/app/oracle/Backup/IMSDEV_A_%s_%p_%t_%d.bak' ARCHIVELOG ALL;
+BACKUP FORMAT '/u01/app/oracle/Backup/IMSDEV_C_%s_%p_%t_%d.bak' CURRENT CONTROLFILE;
+RELEASE CHANNEL c1;
+RELEASE CHANNEL c2;
+RELEASE CHANNEL c3;
+RELEASE CHANNEL c4;
+RELEASE CHANNEL c5;
+RELEASE CHANNEL c6;
+RELEASE CHANNEL c7;
+}
+
+set decryption identified by nccps123; 
+
+rman auxiliary / log="D:\STG3_RMAN_ERP11\RESTORE_STG3CD_to_ERPCD.log"
+run
+{
+  allocate auxiliary channel c1 device type disk;
+  allocate auxiliary channel c2 device type disk;
+  allocate auxiliary channel c3 device type disk;
+  allocate auxiliary channel c4 device type disk;
+  allocate auxiliary channel c5 device type disk;
+  allocate auxiliary channel c6 device type disk;
+  allocate auxiliary channel c7 device type disk;
+  allocate auxiliary channel c8 device type disk;
+  duplicate database to 'SRAUT' backup location '/u01/app/oracle/Backup/' nofilenamecheck;
+  release channel c1;
+  release channel c2;
+  release channel c3;
+  release channel c4;
+  release channel c5;
+  release channel c6;
+  release channel c7;
+  release channel c8;
+}
+
+
+ - Add standby log files (adjust paths if needed)
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 11 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO11.log' SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 12 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO12.log' SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 13 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO13.log' SIZE 200M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 14 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO14.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 15 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO15.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 16 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO16.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 17 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO17.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 18 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO18.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 19 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO19.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 20 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO20.log' SIZE 50M;
+ALTER DATABASE ADD STANDBY LOGFILE GROUP 21 '/u01/app/oracle/Standby/IMSDEV/STANDBYREDO21.log' SIZE 200M;
+
+ALTER DATABASE ADD LOGFILE GROUP 1 '/u01/app/oracle/oradata/IMSDEV/REDO01.log' SIZE 200M;
+ALTER DATABASE ADD LOGFILE GROUP 2 '/u01/app/oracle/oradata/IMSDEV/redo02.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 3 '/u01/app/oracle/oradata/IMSDEV/redo03.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 4 '/u01/app/oracle/oradata/IMSDEV/REDO04.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 5 '/u01/app/oracle/oradata/IMSDEV/REDO05.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 6 '/u01/app/oracle/oradata/IMSDEV/REDO06.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 7 '/u01/app/oracle/oradata/IMSDEV/REDO07.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 8 '/u01/app/oracle/oradata/IMSDEV/REDO08.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 9 '/u01/app/oracle/oradata/IMSDEV/REDO09.log' SIZE 50M;
+ALTER DATABASE ADD LOGFILE GROUP 10 '/u01/app/oracle/oradata/IMSDEV/REDO10.log' SIZE 50M;

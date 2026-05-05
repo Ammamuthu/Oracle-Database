@@ -57,6 +57,40 @@ NAME                                 TYPE                             VALUE
 ------------------------------------ -------------------------------- ------------------------------
 local_listener                       string                           LISTENERPPP
 parallel_force_local                 boolean                          FALSE
-SQL>
+
+SQL>alter system register;
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Step - 4 :
+----------
+If db service is not came in "Lsnrctl status" check with static service creation on listerner.ora
+
+SID_LIST_LISTENER =
+  (SID_LIST =
+    (SID_DESC =
+      (GLOBAL_DBNAME = orcl)
+      (ORACLE_HOME = /u01/app/oracle/product/19.0.0/dbhome_1)
+      (SID_NAME = orcl)
+    )
+  )
+
+Restart listner
+
+
+
+
+---------------------------------------------------------------------------------------------
+IF Listener Service's is not listing means,
+---------------------------------------------------------------------------------------------
+
+alter system set local_listener = '(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=<PORT>))' scope = both;
+alter system register;
+
+
+or    --- Try below if we have a Entry in TNSNAMES.ora
+
+
+echo $TNS_ADMIN
+ps -ef | grep pmon
+tnsping LISTENER_IMS

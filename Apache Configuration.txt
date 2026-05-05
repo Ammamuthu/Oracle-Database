@@ -1,0 +1,109 @@
+INSTALLATION - APACHE 
+----------------------
+sudo yum -y install httpd
+sudo yum -y install open_ssl
+sudo yum -y install mod_ssl
+sudo yum -y install mod_security
+
+
+httpd -v
+
+sudo systemctl restart httpd 
+sudo systemctl status httpd 
+
+Configure certificcation
+------------------------------------------------------------------------------------------
+source : 192.168.76.88@imsadmin 
+refernece : /u01/app/bea_14_1/user_projects/domains/basedomainRTP/cert
+
+1. Config >> (in already apache running server)
+------------   Change your [hostname] [ip]
+
+vi ssl_api13aug25.conf
+
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+[req_distinguished_name]
+C = US
+ST = New York
+L = White Plains
+O = ECSFIN INC
+OU = WISE ECS
+CN = TVLV-QAIMFAPP.ecsfin.com
+[v3_req]
+keyUsage =  nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+[alt_names]
+IP.7 = 192.168.77.91
+DNS.1 = TVLV-QAIMFAPP.ecsfin.com
+
+2. Run it change the [.key] [.crt] [-config]  name's :
+-----------------------------------------------------
+
+openssl req -x509 -nodes -newkey rsa:4096 -keyout TVLV-QAIMFAPP.ecsfin.com.key -out TVLV-QAIMFAPP.ecsfin.com.crt -days 3650 -config ssl_api13aug25.conf -extensions v3_req
+
+It will create 2 files :
+-------------------------
+-rw-rw-r-- 1 imsadmin imsadmin 3.2K Aug 13 11:31 TVLV-QAIMFAPP.ecsfin.com.key
+-rw-rw-r-- 1 imsadmin imsadmin 2.1K Aug 13 11:31 TVLV-QAIMFAPP.ecsfin.com.crt
+
+scp TVLV-QAIMFAPP.ecsfin.com* root@192.168.77.91:/etc/httpd/cert
+
+3. httpd.conf :
+---------------    > Take it from any running server change [ip address]
+
+Take a Bkp in our server :
+-------------------------
+mv /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd_bkp.conf
+
+Move from running server to our server :
+----------------------------------------
+scp /etc/httpd/conf/httpd.conf root@192.168.77.91:/etc/httpd/conf 
+
+change [ip address] and details
+
+
+
+4. vhost.conf :
+--------------
+
+cd /etc/httpd/conf
+mkdir sites-available
+cd /etc/httpd/conf
+
+vi vhosts.conf				--> change [.crt , .key , ip , port ]
+
+<VirtualHost *:443>
+        ErrorLog logs/ssl_error_log
+        CustomLog logs/ssl_access_log combined
+        LogLevel warn
+        SSLProxyEngine On
+        SSLEngine On
+        SSLProxyVerify none
+        SSLProxyCheckPeerCN off
+        SSLProxyCheckPeerName off
+        SSLCertificateFile /etc/httpd/cert/TVLV-QAIMFAPP.ecsfin.com.crt
+        SSLCertificateKeyFile /etc/httpd/cert/TVLV-QAIMFAPP.ecsfin.com.key
+        SSLCipherSuite HIGH:EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH:!aNULL:!MD5:!SEED:!IDEA
+        SSLProtocol -all +TLSv1.2 +TLSv1.3
+        SSLHonorCipherOrder Off
+        Header always set Strict-Transport-Security "max-age=31536000; includeSubdomains;"
+        Header set X-XSS-Protection "1; mode=block"
+        Header edit Set-Cookie ^(.*)$ $1;HttpOnly;Secure
+        Header add Set-Cookie "ROUTEID=.%{BALANCER_WORKER_ROUTE}e; path=/" env=BALANCER_ROUTE_CHANGED
+        Header always set X-Content-Type-Options nosniff
+        Header always append X-Frame-Options sameorigin
+        Header always set Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval';"
+        Header always unset X-ORACLE-DMS-ECID
+        RewriteEngine on
+        RewriteRule ^.*\.js$ - [env=headerjs:1]
+        Header set Content-type application/javascript env=headerjs
+        ProxyPreserveHost On
+        ProxyPass       "/" "http://192.168.77.91:7003/" retry=0 acquire=3000 timeout=3000 keepalive=off disablereuse=on
+        ProxyPassReverse "/" "http://192.168.77.91:7003/"
+</VirtualHost>
+
+

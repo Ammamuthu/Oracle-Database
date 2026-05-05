@@ -32,6 +32,7 @@ OPatch Version: 13.9.4.2.18
 OPatch succeeded.
 [imsadmin@ppptechAPP pathes]$
 
+
 4.Apply Actual Patch 
 
 (DOWN The Application)
@@ -65,3 +66,32 @@ java -jar D:\ims_ecs\patch\Jan2025\Weblogic\WLS_SPB_14.1.1.0.250114\tools\opatch
 cd D:\ims_ecs\patch\Jan2025\Weblogic\WLS_SPB_14.1.1.0.250114\binary_patches
 D:\ims_ecs\bea14_1\OPatch\opatch napply -report -oh D:\ims_ecs\bea14_1 -phBaseFile windows64_patchlist.txt
 D:\ims_ecs\bea14_1\OPatch\opatch napply -oh D:\ims_ecs\bea14_1 -phBaseFile windows64_patchlist.txt
+
+
+
+
+Known Error :
+------------
+
+If you having a Tmp mount point issue on Server lever
+
+--------------------------------------
+mkdir logs
+
+java -Djava.io.tmpdir=/u01/software/Patches/logs -jar opatch_generic.jar -silent ORACLE_HOME=/u01/app/bea_14_1/
+--------------------------------------
+
+if any fuser related error :
+
+--------------------------------
+
+opatch_no_fuser=true
+
+now try to apply the patch 
+
+
+if no zip software
+--------------------
+
+jar -cvf file.zip folder/
+

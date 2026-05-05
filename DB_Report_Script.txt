@@ -1,0 +1,154 @@
+set linesize 300 pages 200 trimspool on
+
+prompt ============================================================
+prompt   ORACLE 19c PERFORMANCE DIAGNOSTIC REPORT
+prompt ============================================================
+prompt   Date: &&date
+prompt ============================================================
+
+SET TERMOUT OFF 
+col name format a40
+col value format 999,999,999,999
+col username format a20
+col program format a35
+col event format a45
+col sql_id format a15
+col status format a15
+col machine format a25
+COLUMN SQL_TEXT FORMAT a150 WORD_WRAPPED
+prompt
+prompt ============================================================
+prompt 1. Instance Information
+prompt ============================================================
+select instance_name, host_name, version, startup_time 
+from v$instance;
+
+prompt
+prompt ============================================================
+prompt 2. Database Load (CPU / Active Sessions Last Minute)
+prompt ============================================================
+select name, round(value,2) value
+from v$sysmetric
+where name in (
+    'Host CPU Utilization (%)',
+    'Database CPU Time Ratio',
+    'Average Active Sessions'
+)
+and intsize_csec = (select max(intsize_csec) from v$sysmetric);
+
+prompt
+prompt ============================================================
+prompt 3. Top Foreground Wait Events (Since Startup)
+prompt ============================================================
+select event, total_waits, time_waited/100 time_sec
+from v$system_event
+where wait_class <> 'Idle'
+order by time_waited desc fetch first 15 rows only;
+
+prompt
+prompt ============================================================
+prompt 4. Active Sessions (Real-Time)
+prompt ============================================================
+select sid, serial#, username, status, event, wait_class,
+       blocking_session, seconds_in_wait, sql_id
+from v$session
+where type='USER'
+order by seconds_in_wait desc;
+
+prompt
+prompt ============================================================
+prompt 5. Blocking Sessions
+prompt ============================================================
+select s.sid, s.serial#, s.username, s.event, 
+       s.blocking_session, b.username blocker_user, s.sql_id
+from v$session s
+left join v$session b on s.blocking_session = b.sid
+where s.blocking_session is not null;
+
+prompt
+prompt ============================================================
+prompt 6. Top SQL by CPU Time
+prompt ============================================================
+select sql_id, cpu_time/1000000 cpu_sec, elapsed_time/1000000 ela_sec, 
+       executions, sql_text
+from v$sql
+order by cpu_time desc fetch first 10 rows only;
+
+prompt
+prompt ============================================================
+prompt 7. Top SQL by Elapsed Time
+prompt ============================================================
+select sql_id, elapsed_time/1000000 ela_sec, cpu_time/1000000 cpu_sec,
+       executions, sql_text
+from v$sql
+order by elapsed_time desc fetch first 10 rows only;
+
+prompt
+prompt ============================================================
+prompt 8. Long Running Operations
+prompt ============================================================
+select sid, serial#, sql_id, opname, sofar, totalwork,
+       round((sofar/totalwork)*100,2) pct_complete
+from v$session_longops
+where totalwork > 0;
+
+prompt
+prompt ============================================================
+prompt 9. Tablespace Usage
+prompt ============================================================
+select tablespace_name, used_percent
+from dba_tablespace_usage_metrics
+order by used_percent desc;
+
+prompt
+prompt ============================================================
+prompt 10. TEMP Usage (Users Using TEMP)
+prompt ============================================================
+select username, sum(blocks)*8/1024 MB_used
+from v$tempseg_usage
+group by username
+order by MB_used desc;
+
+prompt
+prompt ============================================================
+prompt 11. Undo Usage
+prompt ============================================================
+select status, sum(bytes)/1024/1024 MB
+from dba_undo_extents
+group by status;
+
+prompt
+prompt ============================================================
+prompt 12. I/O Performance (Datafiles)
+prompt ============================================================
+select name, phyrds, phywrts,
+       readtim/100 read_time_sec,
+       writetim/100 write_time_sec
+from v$filestat fs, v$datafile df
+where fs.file# = df.file#
+order by readtim desc fetch first 15 rows only;
+
+prompt
+prompt ============================================================
+prompt 13. SGA Components
+prompt ============================================================
+show parameter sga
+
+prompt
+prompt ============================================================
+prompt 14. PGA Statistics
+prompt ============================================================
+select name, value 
+from v$pgastat
+order by value desc;
+
+prompt
+prompt ============================================================
+prompt 15. Memory Advisors (SGA/PGA)
+prompt ============================================================
+select * from v$memory_dynamic_components;
+
+prompt
+prompt ============================================================
+prompt END OF REPORT
+prompt ============================================================

@@ -69,3 +69,14 @@ lsdg
 ls +DATA
 # ▶ List files in the DATA diskgroup
 
+
+
+ASM USAGE -
+--------
+
+SELECT NAME, STATE, TYPE, 
+     ROUND(TOTAL_MB / 1024, 2) "SIZE_GB",
+     ROUND(FREE_MB / 1024, 2) "AVAILABLE_GB",
+     ROUND((total_mb - free_mb) / total_mb * 100, 2) AS "USED%"
+FROM v$asm_diskgroup;
+

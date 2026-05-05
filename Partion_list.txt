@@ -1,0 +1,122 @@
+SELECT 
+    i.table_owner,
+    i.table_name,
+    i.index_name,
+    p.partition_name,
+    p.partition_position,
+    p.status
+FROM dba_indexes i
+LEFT JOIN dba_ind_partitions p
+    ON i.owner = p.index_owner
+    AND i.index_name = p.index_name
+WHERE i.table_name = 'YOUR_TABLE_NAME'
+AND i.table_owner = 'YOUR_SCHEMA'
+ORDER BY i.index_name, p.partition_position;
+
+
+
+SELECT 
+    index_owner,
+    index_name,
+    partition_name,
+    subpartition_name,
+    subpartition_position,
+    tablespace_name,
+    status
+FROM dba_ind_subpartitions
+WHERE index_owner = 'YOUR_SCHEMA'
+AND index_name IN (
+    SELECT index_name
+    FROM dba_indexes
+    WHERE table_name = 'YOUR_TABLE_NAME'
+    AND owner = 'YOUR_SCHEMA'
+)
+ORDER BY index_name, subpartition_position;
+
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SELECT DISTINCT
+    'ALTER INDEX ' || owner || '.' || index_name || ' UNUSABLE;' AS sql_stmt
+FROM dba_indexes
+WHERE owner = 'TRANS'
+AND table_name IN (
+'SWIFT_IN_REPOSITORY',
+'SWIFT_IN_ENVELOPE',
+'SWIFT_IN_EVENT_LOG',
+'SWIFT_OUT_EVENT_LOG',
+'SWIFT_OUT_ENVELOPE',
+'MSG_OUT_EVENT_LOG',
+'SWIFT_OUT_REPOSITORY',
+'SWIFT_ACK_REPOSITORY',
+'MSG_OUT_ENVELOPE',
+'MSG_OUT_REPOSITORY',
+'ACK_XFM_REP',
+'EMAIL_HISTORY',
+'FILE_PROCESS',
+'EMAIL_HISTORY_DTLS'
+)
+AND status = 'UNUSABLE'
+
+UNION
+
+SELECT DISTINCT
+    'ALTER INDEX ' || index_owner || '.' || index_name ||
+    ' MODIFY PARTITION ' || partition_name || ' UNUSABLE;' AS sql_stmt
+FROM dba_ind_partitions
+WHERE status = 'UNUSABLE'
+AND index_owner = 'TRANS'
+AND index_name IN (
+    SELECT DISTINCT index_name
+    FROM dba_indexes
+    WHERE owner = 'TRANS'
+    AND table_name IN (
+        'SWIFT_IN_REPOSITORY',
+        'SWIFT_IN_ENVELOPE',
+        'SWIFT_IN_EVENT_LOG',
+        'SWIFT_OUT_EVENT_LOG',
+        'SWIFT_OUT_ENVELOPE',
+        'MSG_OUT_EVENT_LOG',
+        'SWIFT_OUT_REPOSITORY',
+        'SWIFT_ACK_REPOSITORY',
+        'MSG_OUT_ENVELOPE',
+        'MSG_OUT_REPOSITORY',
+        'ACK_XFM_REP',
+        'EMAIL_HISTORY',
+        'FILE_PROCESS',
+        'EMAIL_HISTORY_DTLS'
+    )
+)
+ORDER BY 1;
+
+
+
+
+
+
+
+
+
+SELECT 
+    'ALTER INDEX ' || owner || '.' || index_name || ' REBUILD;' AS sql_stmt
+FROM dba_indexes
+WHERE owner = 'YOUR_SCHEMA'
+AND table_name = 'YOUR_TABLE_NAME'
+AND status = 'UNUSABLE'
+
+UNION ALL
+
+SELECT 
+    'ALTER INDEX ' || index_owner || '.' || index_name ||
+    ' REBUILD PARTITION ' || partition_name || ';'
+FROM dba_ind_partitions
+WHERE status = 'UNUSABLE'
+AND index_owner = 'YOUR_SCHEMA'
+AND index_name IN (
+    SELECT index_name
+    FROM dba_indexes
+    WHERE table_name = 'YOUR_TABLE_NAME'
+    AND owner = 'YOUR_SCHEMA'
+);

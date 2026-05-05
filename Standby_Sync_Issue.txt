@@ -1,0 +1,94 @@
+Primary:
+-------
+select max(sequence#) from v$archived_log where archived='YES'
+147599
+
+Standby:
+--------
+select max(sequence#) from v$archived_log where applied='YES'
+147536
+
+63 - around not applied
+
+
+
+1_147536_1174497023.dbf - present in DR (37 is not present next file /u01/app/oracle/arch/IMSDEV/1_147537_1174497023.dbf)
+
+
+
+Run this query to find where all files present
+-----------------------------------------------(Prod)
+
+select sequence#, name from v$archived_log
+where sequence# between 147536 and 147599
+order by sequence#;
+
+
+stop the MRP :
+-------------
+SQL> alter database recover managed standby database cancel;
+
+Database altered.
+
+
+scp the arch files what are missing in DR:
+------------------------------------------
+
+alter database register logfile '/u01/app/oracle/arch/IMSDEV/1_147537_1174497023.dbf';
+
+
+(OR) 
+
+
+BEGIN
+   FOR i IN 5342 .. 5437 LOOP
+      EXECUTE IMMEDIATE
+         'ALTER DATABASE REGISTER OR REPLACE LOGFILE ' ||
+         '''/u01/app/oracle/arch/IMSDEV/1_' || i || '_1174497023.DBF''';
+   END LOOP;
+END;
+/
+
+
+Start MRP:
+---------
+alter database recover managed standby database using current logfile disconnect;
+
+
+Check the Process:
+------------------
+select process, status, sequence# from v$managed_standby;
+
+
+
+On DB Level Query's:
+--------------------
+SELECT GROUP#,THREAD#,SEQUENCE#,ARCHIVED,STATUS FROM V$STANDBY_LOG;
+
+
+set pages 999 lines 999
+COL DEST_NAME FOR A30
+COL STATUS FOR A20
+select dest_id,dest_name,error,status from v$archive_dest;
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------
+Rebuild from Scratch
+
+
+DUPLICATE TARGET DATABASE
+  FOR STANDBY
+  FROM ACTIVE DATABASE
+  PASSWORD FILE
+  SPFILE
+    SET DB_FILE_NAME_CONVERT '/u01/app/oracle/oradata/IMSDEV/','/u01/app/oracle/oradata/IMSDEV/',
+                             SELECT * FROM V$DATABASE_BLOCK_CORRUPTION;
+
+    SET LOG_FILE_NAME_CONVERT '/u01/app/oracle/oradata/IMSDEV/','/u01/app/oracle/oradata/IMSDEV/',
+                              '/u01/app/oracle/datafiles/IMSDEV/','/u01/app/oracle/datafiles/IMSDEV/'
+	SET DB_UNIQUE_NAME 'IMSDEV_D';
+
+----------------------------------------------------------------------------------------------------------------

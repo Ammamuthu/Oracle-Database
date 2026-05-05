@@ -1,0 +1,238 @@
+# 📘 Oracle LOB & Partition Handling – Beginner to Pro Guide
+
+---
+
+## 🧾 1. What is a LOB Column?
+
+LOB (Large Object) data types:
+
+* `CLOB` (Character Large Object)
+* `BLOB` (Binary Large Object)
+* `NCLOB`, `BFILE`
+
+Used to store large data like XML, documents, logs, images, etc.
+
+---
+
+## 🧱 2. How Oracle Stores LOB Data
+
+| Type               | Storage Behavior                                                      |
+| ------------------ | --------------------------------------------------------------------- |
+| Small LOB values   | Can be stored **inline** in the table row                             |
+| Large LOB values   | Stored **out-of-line** in separate segment (`LOB segment`)            |
+| Tracking mechanism | Oracle creates a **system-generated LOB index** to map row → LOB data |
+
+---
+
+## 📦 3. What Segments Are Created?
+
+For each `LOB` column:
+
+* ✅ **LOB Segment**: Actual data (CLOB/BLOB) goes here
+* ✅ **LOB Index**: Automatically created internal index to map data
+
+You can find these by querying:
+
+```sql
+SELECT column_name, segment_name, index_name 
+FROM dba_lobs 
+WHERE table_name = 'YOUR_TABLE';
+```
+
+---
+
+## 🧩 4. LOBs in a Partitioned Table
+
+When a **table is partitioned**, LOB data is **also partitioned** — automatically.
+
+For example:
+
+```sql
+CREATE TABLE msg_data (
+  id NUMBER,
+  msg CLOB
+)
+PARTITION BY LIST (region)
+(
+  PARTITION p1 VALUES ('EAST'),
+  PARTITION p2 VALUES ('WEST')
+);
+```
+
+Oracle creates:
+
+* `msg` column → 1 LOB segment **per table partition**
+* LOB index → 1 index **per LOB partition**
+
+So for 2 table partitions and 1 LOB column → **2 LOB segments** and **2 LOB indexes**
+
+---
+
+## 🔀 5. What Happens During `ALTER TABLE ... MOVE`?
+
+### ➤ If table is **not partitioned**:
+
+```sql
+ALTER TABLE your_table MOVE;
+```
+
+✅ Moves the table segment
+❌ Does NOT move LOB segments
+❌ LOB indexes may become invalid/unusable
+
+👉 You must **manually move** the LOB segments:
+
+```sql
+ALTER TABLE your_table 
+MODIFY LOB (your_lob_column) (MOVE);
+```
+
+---
+
+### ➤ If table **is partitioned**:
+
+```sql
+ALTER TABLE your_table MOVE PARTITION p1;
+```
+
+✅ Moves that specific table partition
+❌ LOB partitions are NOT moved
+❌ Related LOB indexes remain stale or unusable
+
+👉 You must move each LOB column's partition manually:
+
+```sql
+ALTER TABLE your_table 
+MODIFY LOB (your_lob_column) (MOVE PARTITION p1);
+```
+
+---
+
+## 🔄 6. Why Move LOB Segments?
+
+* Reclaim space
+* Defragment storage
+* Align segments with tablespace strategy
+* Required after moving base table partitions
+* Ensure internal LOB indexes are valid
+
+---
+
+## 🧰 7. How to Rebuild LOB Index
+
+Oracle manages these indexes (named like `SYS_IL...$$`), but you can rebuild them like this:
+
+```sql
+ALTER INDEX SYS_IL00000...$$ REBUILD;
+```
+
+Or let Oracle do it via:
+
+```sql
+ALTER TABLE your_table
+MODIFY LOB (lob_col) (MOVE);
+```
+
+---
+
+## 📊 8. Visual Layout Example
+
+### Table: `MSG_IN_REPOSITORY` with 3 partitions (`MF_LIV`, `MF_ACT`, `MF_ARC`)
+
+LOB Columns: `MSG_STR`, `COMMENTS`
+
+| Component   | Description                                |
+| ----------- | ------------------------------------------ |
+| Base table  | Partitioned into 3 parts                   |
+| LOB columns | 2 columns × 3 partitions = 6 LOB segments  |
+| LOB indexes | 6 internal indexes (one per LOB partition) |
+
+---
+
+## 🛠️ 9. Sample Script: Move All LOB Partitions
+
+For partition `MF_LIV`:
+
+```sql
+ALTER TABLE MSG_IN_REPOSITORY 
+  MODIFY LOB (MSG_STR) (MOVE PARTITION MF_LIV);
+
+ALTER TABLE MSG_IN_REPOSITORY 
+  MODIFY LOB (COMMENTS) (MOVE PARTITION MF_LIV);
+-- Repeat for other LOB columns
+```
+
+Repeat the above for `MF_ACT`, `MF_ARC`, etc.
+
+---
+
+## 🧪 10. How to Check Segment Sizes
+
+```sql
+SELECT partition_name, SUM(bytes)/1024/1024/1024 AS size_gb
+FROM dba_segments
+WHERE segment_name = 'MSG_IN_REPOSITORY'
+AND owner = 'RTP1'
+GROUP BY partition_name;
+```
+
+To include LOBs, join with `DBA_LOB_PARTITIONS` or `DBA_SEGMENTS` where `SEGMENT_TYPE = 'LOB PARTITION'`.
+
+---
+
+## 🧠 11. Summary Table
+
+| Action                            | Applies to           | Notes                                                     |
+| --------------------------------- | -------------------- | --------------------------------------------------------- |
+| `ALTER TABLE ... MOVE`            | Table segment only   | Doesn’t move LOBs                                         |
+| `MODIFY LOB (... MOVE)`           | LOB segment only     | Moves CLOB/BLOB storage and rebuilds LOB index            |
+| `MODIFY LOB (... MOVE PARTITION)` | LOB partition        | Required if table is partitioned                          |
+| `ALTER INDEX ... REBUILD`         | LOB index            | Optional; Oracle rebuilds it automatically in `MOVE`      |
+| Partitioned table                 | LOBs are partitioned | Each LOB column × each partition = separate segment/index |
+
+---
+
+## ✅ DBA Checklist for Table with LOBs
+
+| Step | Task                                          |
+| ---- | --------------------------------------------- |
+| 1️⃣  | Check if table has LOBs → `DBA_LOBS`          |
+| 2️⃣  | Move table partition? Then move LOBs too      |
+| 3️⃣  | Use `MODIFY LOB (...) (MOVE PARTITION ...)`   |
+| 4️⃣  | Rebuild indexes if needed                     |
+| 5️⃣  | Re-check space usage in `DBA_SEGMENTS`        |
+| 6️⃣  | Test performance (LOB reads/writes) post-move |
+
+---
+📏 12. Checking LOB Segment Sizes and Mapping to Table Columns
+✅ View segment sizes (including LOB segments) in a schema:
+sql
+Copy
+Edit
+SELECT 
+    segment_name AS segment,
+    ROUND(SUM(bytes) / 1024 / 1024, 2) AS size_mb
+FROM dba_segments
+WHERE owner = UPPER('RTP1')
+GROUP BY segment_name
+ORDER BY size_mb DESC;
+✅ Find the table and column using a specific LOB segment:
+sql
+Copy
+Edit
+SELECT 
+    table_name,
+    column_name,
+    segment_name
+FROM dba_lobs
+WHERE segment_name = 'SYS_LOB0000089918C00003$$';
+Example output might be:
+
+TABLE_NAME	COLUMN_NAME	SEGMENT_NAME
+MSG_OUT_MSGS	MSG_STR	SYS_LOB0000089918C00003$$
+
+⚠️ Important:
+You cannot query a LOB segment directly (like a table). To see LOB data:
+
+Query the LOB column in the base table (e.g., SELECT MSG_STR FROM MSG_OUT_MSGS WHERE ...)
+
