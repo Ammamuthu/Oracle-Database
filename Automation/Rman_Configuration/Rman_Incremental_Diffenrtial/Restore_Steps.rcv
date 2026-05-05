@@ -1,0 +1,65 @@
+RMAN TARGET /
+
+STARTUP NOMOUNT;
+
+-- Tell RMAN where your backup files are on the new server
+CATALOG START WITH 'D:\ims_ecs\Backup\IMS\Level_0\';
+CATALOG START WITH 'D:\ims_ecs\Backup\IMS\Level_1\';
+
+-- Restore controlfile
+RESTORE CONTROLFILE FROM AUTOBACKUP;
+
+ALTER DATABASE MOUNT;
+
+-- If Path Change "Need to change in Pfile"
+
+db_file_name_conver
+log_file_name_convert
+
+ ALTER SYSTEM  SET log_file_name_convert =
+(
+ '+DATA/SRA/ONLINELOG/', '/u01/app/oracle/oradata/SRAUT/',
+ '+FRA/SRA/ONLINELOG/',  '/u01/app/oracle/oradata/SRAUT/mirrorlog/'
+) SCOPE=SPFILE;
+
+ALTER SYSTEM SET db_file_name_convert=
+'+DATA/SRA/DATAFILE/', '/u01/app/oracle/datafiles/SRAUT/'
+SCOPE=SPFILE;
+
+
+RUN {
+ALLOCATE CHANNEL c1 TYPE DISK;
+ALLOCATE CHANNEL c2 TYPE DISK;
+ALLOCATE CHANNEL c3 TYPE DISK;
+ALLOCATE CHANNEL c4 TYPE DISK;
+
+RESTORE DATABASE;
+RECOVER DATABASE;
+
+RELEASE CHANNEL c1;
+RELEASE CHANNEL c2;
+RELEASE CHANNEL c3;
+RELEASE CHANNEL c4;
+}
+
+ALTER DATABASE OPEN RESETLOGS;
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++ Manual Way +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+RMAN TARGET /
+
+STARTUP NOMOUNT;
+
+-- Always use the latest controlfile
+RESTORE CONTROLFILE FROM 'D:\ims_ecs\Backup\IMS\Level_1\IMS_CTL_Saturday.bak';
+
+ALTER DATABASE MOUNT;
+
+CATALOG START WITH 'D:\ims_ecs\Backup\IMS\Level_0\';
+CATALOG START WITH 'D:\ims_ecs\Backup\IMS\Level_1\';
+
+RESTORE DATABASE;
+RECOVER DATABASE;
+
+ALTER DATABASE OPEN RESETLOGS;

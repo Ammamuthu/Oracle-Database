@@ -1,0 +1,40 @@
+# -------------------------------------------------------
+# RESTORE STEPS - CUMULATIVE INCREMENTAL
+# RMAN only needs: L0 Sunday + LATEST L1 Cumulative
+# -------------------------------------------------------
+
+# STEP 1 - Start database in NOMOUNT
+STARTUP NOMOUNT;
+
+# STEP 2 - Restore latest controlfile (use latest CTL)
+RESTORE CONTROLFILE FROM 'D:\ims_ecs\Backup\IMS\Level_1\IMS_CTL_%s_%p_%t_%d.bak';
+
+# STEP 3 - Mount database
+ALTER DATABASE MOUNT;
+
+# STEP 4 - Catalog backup folders (required if restoring to new server)
+CATALOG START WITH 'D:\ims_ecs\Backup\IMS\Level_0\';
+CATALOG START WITH 'D:\ims_ecs\Backup\IMS\Level_1\';
+
+# STEP 5 - Restore and Recover
+RUN {
+ALLOCATE CHANNEL c1 TYPE DISK;
+ALLOCATE CHANNEL c2 TYPE DISK;
+ALLOCATE CHANNEL c3 TYPE DISK;
+ALLOCATE CHANNEL c4 TYPE DISK;
+
+# RMAN automatically picks:
+# --> Sunday L0 (baseline)
+# --> Saturday L1 CUMULATIVE only (latest, has all changes since Sunday)
+# --> Archivelogs to fill the gap
+RESTORE DATABASE;
+RECOVER DATABASE;
+
+RELEASE CHANNEL c1;
+RELEASE CHANNEL c2;
+RELEASE CHANNEL c3;
+RELEASE CHANNEL c4;
+}
+
+# STEP 6 - Open database
+ALTER DATABASE OPEN RESETLOGS;

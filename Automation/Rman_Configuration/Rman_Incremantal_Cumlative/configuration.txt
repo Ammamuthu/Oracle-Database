@@ -1,0 +1,27 @@
+---
+
+### 🗂️ Folder Structure to Create First
+```
+mkdir D:\ims_ecs\scripts\Level_0\logs
+mkdir D:\ims_ecs\scripts\Level_1\logs
+mkdir D:\ims_ecs\Backup\IMS\Level_0
+mkdir D:\ims_ecs\Backup\IMS\Level_1
+
+
+Enable  - Enable block change tracking for rman Incremental Backup
+------------------------------------------------------------------
+
+
+select filename,status from v$block_change_tracking;
+
+ALTER DATABASE ENABLE BLOCK CHANGE TRACKING USING FILE '/u01/app/oracle/oradata/AQR/bct.dbf';
+ 
+select filename,status from v$block_change_tracking;
+
+
+If Above show's still disable
+------------------------------
+
+alter database enable block change tracking;
+
+alter database disable block change tracking;
