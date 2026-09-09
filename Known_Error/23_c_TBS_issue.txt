@@ -1,0 +1,21 @@
+SELECT property_name, property_value
+FROM database_properties
+WHERE property_name = 'DEFAULT_TBS_TYPE';
+
+
+ALTER DATABASE SET DEFAULT SMALLFILE TABLESPACE;
+
+
+SELECT
+    df.tablespace_name,
+    ts.bigfile,
+    ts.block_size,
+    df.file_name,
+    ROUND(df.bytes / POWER(1024,3), 2) AS current_size_gb,
+    ROUND(df.maxbytes / POWER(1024,3), 2) AS max_size_gb,
+    df.autoextensible,
+    ROUND(df.increment_by * ts.block_size / POWER(1024,2), 2) AS autoextend_mb
+FROM dba_data_files df
+JOIN dba_tablespaces ts
+    ON df.tablespace_name = ts.tablespace_name
+WHERE df.tablespace_name IN ('ACH_DATA2','ACH_DATA3','ACH_DATA4');

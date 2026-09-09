@@ -1,0 +1,12 @@
+Scenario - 1 :
+_____________
+
+
+Eg : Unable to drop a Standby Redo - status ACTIVE (' physical file not present') - PROD 
+
+
+ALTER DATABASE CLEAR UNARCHIVED LOGFILE GROUP 12;
+ 
+alter database clear logfile group 12;
+
+alter database drop logfile group 12;

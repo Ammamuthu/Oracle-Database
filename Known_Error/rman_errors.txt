@@ -1,0 +1,94 @@
+===========================================================
+      ORACLE RMAN FULL BACKUP RESTORE - RECOVERY STEPS
+===========================================================
+
+Scenario:
+---------
+After restoring a full RMAN backup:
+
+    RESTORE CONTROLFILE  -> Completed
+    RESTORE DATABASE     -> Completed
+    RECOVER DATABASE     -> Failed
+
+Error:
+------
+ORA-19698: REDO01.LOG is from different database id:
+            3458987654
+            db_name=IMS
+
+Cause:
+------
+The online redo log file physically present at the specified path
+belongs to a different Oracle database (different DBID) than the
+database that was restored.
+
+===========================================================
+METHOD 1 - RECOVER UNTIL LAST ARCHIVELOG SEQUENCE
+===========================================================
+
+1. Connect to RMAN
+
+    RMAN> rman target /
+
+2. List available archived log backups
+
+    RMAN> LIST BACKUP OF ARCHIVELOG ALL;
+
+3. Note the highest archived log sequence number.
+
+    Example:
+        Last Sequence = 250
+
+4. Recover until one sequence after the last available archive log.
+
+    RMAN> RECOVER DATABASE UNTIL SEQUENCE 251 THREAD 1;
+
+    (Use Last_Sequence + 1)
+
+5. Open the database
+
+    SQL> ALTER DATABASE OPEN RESETLOGS;
+
+===========================================================
+METHOD 2 - REMOVE EXISTING ONLINE REDO LOG FILES
+===========================================================
+
+If Method 1 does not work:
+
+1. Stop the database (if required).
+
+2. Delete the existing online redo log files from the OS.
+
+    D:\IMS_ECS\ORACLE\ORADATA\IMS\REDO01.LOG
+    D:\IMS_ECS\ORACLE\ORADATA\IMS\REDO02.LOG
+    D:\IMS_ECS\ORACLE\ORADATA\IMS\REDO03.LOG
+
+Windows Command:
+
+    del D:\IMS_ECS\ORACLE\ORADATA\IMS\REDO01.LOG
+    del D:\IMS_ECS\ORACLE\ORADATA\IMS\REDO02.LOG
+    del D:\IMS_ECS\ORACLE\ORADATA\IMS\REDO03.LOG
+
+3. Start recovery again.
+
+    RMAN> RECOVER DATABASE;
+
+4. Open the database.
+
+    SQL> ALTER DATABASE OPEN RESETLOGS;
+
+===========================================================
+NOTES
+===========================================================
+
+• ORA-19698 indicates that an online redo log belongs to a different
+  database (different DBID).
+
+• This commonly occurs when restoring a database over an existing
+  Oracle home or data location that still contains redo logs from
+  another database.
+
+• After OPEN RESETLOGS, Oracle creates a new incarnation of the
+  database and recreates the online redo logs if necessary.
+
+===========================================================

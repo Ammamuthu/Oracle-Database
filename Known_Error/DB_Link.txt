@@ -1,0 +1,73 @@
+SELECT owner,
+       db_link,
+       username,
+       host,
+       created
+FROM   all_db_links;
+
+DROP PUBLIC DATABASE LINK DBLINK_ARC_DB;
+
+CREATE PUBLIC DATABASE LINK DBLINK_ARC_DB
+CONNECT TO TRANS IDENTIFIED BY new_password
+USING '10.122.192.96:1522/MHPS';
+
+SELECT * FROM dual@DBLINK_ARC_DB;
+
+
+in sqlnet.ora 
+-------------
+SQLNET.AUTHENTICATION_SERVICES = (ALL)  - > SQLNET.AUTHENTICATION_SERVICES = (NONE)
+
+
+or
+
+SQLNET.AUTHENTICATION_SERVICES = (BEQ)    - Linux
+								[ local OS authentication ]
+SQLNET.AUTHENTICATION_SERVICES = (NTS)    - Windows       
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ORA-12514: TNS:listener does not currently know of service requested in connect descriptor
+
+|
+|
+if this error means .
+
+SELECT name FROM v$services;  -- > Should be Present in Target Server
+
+Eg : MHPS
+
+tnsping MHPS
+
+sqlplus user/password@MHPS
+
+
+These 3 should work
+
+
+_________________________________________________________________
+
+If still "ORA-12514" Presist
+
+DROP DATABASE LINK DBLINK_ARC_DB;
+
+CREATE PUBLIC DATABASE LINK DBLINK_ARC_DB
+CONNECT TO user IDENTIFIED BY password
+USING '(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=MHPS)))';
+
+
+Or
+
+DROP DATABASE LINK DBLINK_ARC_DB;
+
+CREATE DATABASE LINK DBLINK_ARC_DB
+CONNECT TO username IDENTIFIED BY password
+USING 'MHPS';                                         - - - This should be in tnsnames.ora
+
+_________________________________________________________________
+
+
+
+
+

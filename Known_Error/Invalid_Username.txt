@@ -1,0 +1,18 @@
+alter user TRANS identified by imsuser01#123;    ---- Reset the same password 
+
+
+
+ORA-28003: password verification for the specified password failed
+ORA-20004: Password contains the server name
+
+----------------------------------------------------------------------------- If you face above issue do below -----------
+
+
+select username, profile from dba_users  where username='TRANS';
+
+select resource_name, limit from dba_profiles where profile='SEC_SYSAPP';     --Pass The profile of here
+
+alter profile SEC_SYSAPP limit PASSWORD_VERIFY_FUNCTION null;				  -- here as well 
+alter user TRANS identified by imsuser01#123;
+
+select resource_name, limit from dba_profiles where profile='SEC_SYSAPP';

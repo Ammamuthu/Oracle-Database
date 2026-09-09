@@ -1,0 +1,13 @@
+Error faced - > , while [Setup.exe , runInstaller.sh , dbca]
+
+
+
+1.) For OS- issue By pass [ INS-30001 db is not supported in OS ]
+
+setup.exe -ignorePrereq -J"-Doracle.install.db.validate.supportedOSCheck=false
+
+2.) For Memory related issue , if faced after that page 
+
+dbca -J-Doracle.assistants.dbca.validate.ConfigurationParams=false
+ 
+

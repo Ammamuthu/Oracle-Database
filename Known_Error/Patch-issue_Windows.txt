@@ -1,0 +1,27 @@
+issue - "following active files executables libs are used by oracle_home"
+
+stop DB , in services also VSS writer and Listnerner ,
+Open a new prompt Then re-Run apply
+
+If still issue :
+--------------- (Only on worst case)
+tasklist /m ora*
+taskkill /pid processid_number
+
+Reference  : https://smarttechways.com/2015/03/09/prerequisite-check-checkactivefilesandexecutables-failed-files-are-active-in-patching-activity/
+
+
+
+----------------------------------------------------------------
+
+if Oracle_home has More space then .. We can delete a Inactive Patches " work above version of opatch 12.2.0.1.37"
+
+
+<ORACLE_HOME>/.patch_storage 
+
+
+
+./opatch util listorderedinactivepatches
+./opatch util deleteinactivepatches
+
+REFERENCE : https://oracle-base.com/articles/misc/clean-up-the-patch-storage-directory

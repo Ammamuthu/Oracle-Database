@@ -30,6 +30,7 @@ alter database clear unarchived logfile group 1;
 alter database clear unarchived logfile group 2;
 alter database clear unarchived logfile group 3;
 ----------------------------------------------------
+or 
 
 shut immediate 
 startup
@@ -47,3 +48,7 @@ error :  ORA-01113: file needs media recovery
 SQL> RECOVER DATABASE;
 SQL> ALTER DATABASE OPEN;
 ---------------------------------
+
+______________________________________________________________________________________
+
+
