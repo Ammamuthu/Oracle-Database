@@ -1,3 +1,61 @@
+Linux Disk Partition Concept
+---------------------------
+
+/dev/sdd → Physical Disk
+
+A disk can be divided into partitions:
+
+/dev/sdd1
+/dev/sdd2
+/dev/sdd3
+/dev/sdd4
+
+
+For DOS/MBR partition type:
+
+- Maximum 4 Primary Partitions are allowed.
+
+To check the disk type:
+
+fdisk -l /dev/sdd
+
+Example:
+
+Disklabel type: dos
+
+
+If more than 4 partitions are required:
+
+- Create one partition as an Extended Partition.
+- Create multiple Logical Partitions inside the Extended Partition.
+
+Example:
+
+/dev/sdd
+ |
+ ├── sdd1  Primary
+ ├── sdd2  Primary
+ ├── sdd3  Extended
+ │      |
+ │      ├── sdd5  Logical
+ │      ├── sdd6  Logical
+ │      ├── sdd7  Logical
+ │      └── sdd8  Logical
+ |
+ └── sdd4  Primary
+
+
+Extended Partition:
+- Acts as a container for Logical Partitions.
+- Multiple Logical Partitions can be created inside it.
+- Logical partitions start from number 5.
+
+_____________________________________________________________________________________________________________________________________
+
+Technical Guide - initial Setup 
+---------------
+
+
 # 1. Partition the disk /dev/sdc
 fdisk /dev/sdc
 # ▶ Launch the partitioning tool to create new partitions on /dev/sdc.
@@ -79,4 +137,723 @@ SELECT NAME, STATE, TYPE,
      ROUND(FREE_MB / 1024, 2) "AVAILABLE_GB",
      ROUND((total_mb - free_mb) / total_mb * 100, 2) AS "USED%"
 FROM v$asm_diskgroup;
+
+
+-----------------------------------------------------------------------------------------------------------------------------------
+
+Steps to Add a New Disk to Existing ASM Disk Group
+
+_____________________________________________________________________________________________________________________________________
+
+
+1. Login as root user
+---------------------
+
+Verify the new disk:
+
+# lsblk
+
+# fdisk -l /dev/sdd
+
+Example output:
+
+/dev/sdd4   100G   (New partition for ASM)
+
+
+2. Create ASM partition (if not already created)
+------------------------------------------------
+
+# fdisk /dev/sdd
+
+Inside fdisk:
+
+Command (m for help): n
+Select partition type: p
+Partition number: 4
+First sector: Press Enter
+Last sector: Press Enter (or) +100G
+
+Save changes:
+
+Command (m for help): w
+
+
+Refresh partition table:
+-----------------------
+
+# partprobe /dev/sdd
+
+Verify:
+
+# lsblk
+
+# fdisk -l /dev/sdd
+
+
+3. Create ASM disk using ASMLib
+--------------------------------
+
+# oracleasm createdisk DATA03 /dev/sdd4
+
+
+Scan ASM disks:
+
+# oracleasm scandisks
+
+
+Verify ASM disks:
+
+# oracleasm listdisks
+
+
+Expected output:
+
+DATA01
+DATA02
+DATA03
+
+
+4. Login to ASM instance
+
+# sqlplus / as sysasm
+
+
+5. Check ASM disk status
+
+SQL> SELECT path,
+            header_status,
+            mode_status,
+            state
+     FROM v$asm_disk;
+
+
+Verify the new disk appears as:
+
+HEADER_STATUS = CANDIDATE
+
+
+6. Add the new disk to DATA disk group
+
+SQL> ALTER DISKGROUP DATA
+     ADD DISK 'ORCL:DATA03';
+
+
+7. Monitor ASM rebalance
+
+SQL> SELECT group_number,
+            operation,
+            state,
+            power,
+            sofar,
+            est_work,
+            est_minutes
+     FROM v$asm_operation;
+
+
+Wait until no rows are returned.
+
+
+8. Verify DATA disk group size
+
+SQL> SELECT name,
+            total_mb,
+            free_mb
+     FROM v$asm_diskgroup;
+
+
+9. Verify disks in DATA disk group
+
+SQL> SELECT disk_number,
+            name,
+            path,
+            total_mb,
+            free_mb
+     FROM v$asm_disk
+     WHERE group_number =
+     (
+       SELECT group_number
+       FROM v$asm_diskgroup
+       WHERE name='DATA'
+     );
+
+
+The new disk DATA03 should now be part of the DATA disk group.
+_____________________________________________________________________________________________________________________________________
+
+
+
+ORACLE ASM (AUTOMATIC STORAGE MANAGEMENT) - STUDY NOTES
+
+====================================================
+
+1. WHY ASM EXISTS
+   ====================================================
+
+Before ASM:
+
+Database files were stored on traditional file systems.
+
+Example:
+
+/u01/oradata/PROD/system01.dbf
+/u01/oradata/PROD/users01.dbf
+
+Problems:
+
+* DBA had to manage disks manually.
+* Uneven I/O distribution.
+* Difficult storage expansion.
+* Complex mirroring setup.
+* Dependency on third-party volume managers.
+
+Oracle introduced ASM to:
+
+* Simplify storage management.
+* Automatically distribute data.
+* Provide mirroring.
+* Provide online storage expansion.
+* Improve performance.
+
+ASM is Oracle's volume manager and file system for Oracle databases.
+
+====================================================
+2. ASM ARCHITECTURE OVERVIEW
+============================
+
+```
+            Database Instance
+                     |
+                  ASMB
+                     |
+                     v
+               ASM Instance
+                     |
+              Disk Groups
+                     |
+                 ASM Disks
+                     |
+              Allocation Units
+                     |
+                  Extents
+                     |
+                   Files
+```
+
+ASM does not store user data in memory.
+
+ASM stores metadata describing:
+
+* Which disk contains data.
+* Where mirrors exist.
+* Extent locations.
+* Disk group information.
+
+====================================================
+3. ASM INSTANCE
+===============
+
+ASM instance is separate from database instance.
+
+Purpose:
+
+* Manage storage.
+* Manage disk groups.
+* Track metadata.
+* Handle rebalancing.
+
+Important processes:
+
+RBAL
+Rebalance coordinator
+
+ARBn
+Actual rebalance workers
+
+GMON
+Disk group monitor
+
+MARK
+Recovery-related marking
+
+ASMB
+Communication between DB and ASM
+
+====================================================
+4. DISK GROUPS
+==============
+
+Disk group is the primary storage container.
+
+Example:
+
++DATA
++FRA
++OCR
+
+Think of a disk group as a logical storage pool.
+
+Example:
+
++DATA
+├── DATA_01
+├── DATA_02
+└── DATA_03
+
+====================================================
+5. ASM DISKS
+============
+
+ASM disks are physical or logical disks.
+
+Examples:
+
+DATA_01
+DATA_02
+DATA_03
+
+These can be:
+
+* SAN LUNs
+* Raw devices
+* ASMFD devices
+* Multipath devices
+
+====================================================
+6. ALLOCATION UNIT (AU)
+=======================
+
+AU = Allocation Unit
+
+Smallest storage unit managed by ASM.
+
+Common sizes:
+
+1 MB
+4 MB
+8 MB
+16 MB
+
+Example:
+
+Datafile = 12 MB
+
+AU size = 4 MB
+
+Result:
+
+AU1 = 4 MB
+AU2 = 4 MB
+AU3 = 4 MB
+
+====================================================
+7. EXTENTS
+==========
+
+ASM stores files as extents.
+
+A file is broken into extents.
+
+Example:
+
+sales.dbf
+
+AU1
+AU2
+AU3
+
+Each extent is placed on a disk.
+
+====================================================
+8. STRIPING
+===========
+
+Purpose:
+
+Performance.
+
+Without striping:
+
+sales.dbf
+
+DATA_01
+└── Entire file
+
+Only one disk handles all I/O.
+
+With striping:
+
+AU1 -> DATA_01
+AU2 -> DATA_02
+AU3 -> DATA_03
+
+Benefits:
+
+* Parallel reads
+* Parallel writes
+* Better throughput
+
+ASM performs striping automatically.
+
+====================================================
+9. MIRRORING
+============
+
+Purpose:
+
+Protection.
+
+ASM keeps additional copies.
+
+Example:
+
+AU1 Primary -> DATA_01
+AU1 Mirror  -> DATA_02
+
+AU2 Primary -> DATA_02
+AU2 Mirror  -> DATA_03
+
+AU3 Primary -> DATA_03
+AU3 Mirror  -> DATA_01
+
+If DATA_01 fails:
+
+ASM reads mirror from DATA_02.
+
+Database continues running.
+
+====================================================
+10. REDUNDANCY TYPES
+====================
+
+EXTERNAL
+
+No ASM mirror.
+
+Storage array handles protection.
+
+Example:
+
++DATA
+TYPE = EXTERN
+
+---
+
+NORMAL
+
+Two copies.
+
+Example:
+
+Primary + Mirror
+
+---
+
+HIGH
+
+Three copies.
+
+Example:
+
+Primary + Mirror1 + Mirror2
+
+Used for critical environments.
+
+====================================================
+11. FAIL GROUPS
+===============
+
+Fail group defines failure boundaries.
+
+Example:
+
+DATA Disk Group
+
+FG1
+├── DATA_01
+
+FG2
+├── DATA_02
+
+FG3
+├── DATA_03
+
+ASM stores mirrors in different fail groups.
+
+Purpose:
+
+Protect against controller or storage failure.
+
+====================================================
+12. WHO WRITES DATA?
+====================
+
+DBWR
+
+Writes data blocks.
+
+LGWR
+
+Writes redo logs.
+
+ASM does not physically write blocks.
+
+ASM tells Oracle:
+
+Write primary here.
+Write mirror here.
+
+DBWR/LGWR perform the actual I/O.
+
+====================================================
+13. WRITE EXAMPLE
+=================
+
+User inserts data.
+
+Oracle generates:
+
+100 MB logical write.
+
+ASM NORMAL redundancy:
+
+100 MB primary
+100 MB mirror
+
+Physical disk writes:
+
+200 MB
+
+This is expected.
+
+====================================================
+14. REBALANCING
+===============
+
+When a disk is added:
+
+DATA_04
+
+ASM automatically redistributes extents.
+
+Processes:
+
+RBAL
+ARB0
+ARB1
+ARB2
+
+No downtime required.
+
+Example:
+
+Before
+
+DATA_01
+DATA_02
+DATA_03
+
+After
+
+DATA_01
+DATA_02
+DATA_03
+DATA_04
+
+ASM moves extents automatically.
+
+====================================================
+15. DATA DISK GROUP
+===================
+
+Example:
+
++DATA
+
+Stores:
+
+* Datafiles
+* Control files
+* Tempfiles
+* Redo logs
+* SPFILE
+
+Example:
+
++DATA/PROD/DATAFILE/system.dbf
+
+====================================================
+16. FRA DISK GROUP
+==================
+
+Example:
+
++FRA
+
+Stores:
+
+* Archive logs
+* RMAN backups
+* Flashback logs
+* Controlfile backups
+
+Example:
+
++FRA/PROD/ARCHIVELOG
+
+Important:
+
+FRA is NOT mirror storage for DATA.
+
+Mirrors remain inside the same disk group.
+
+====================================================
+17. OCR DISK GROUP
+==================
+
+Used mainly in RAC.
+
+Stores:
+
+OCR
+Voting disks
+
+Example:
+
++OCR
+
+Protects cluster configuration information.
+
+====================================================
+18. IMPORTANT VIEWS
+===================
+
+Disk Groups
+
+SELECT * FROM V$ASM_DISKGROUP;
+
+---
+
+Disks
+
+SELECT * FROM V$ASM_DISK;
+
+---
+
+Clients
+
+SELECT * FROM V$ASM_CLIENT;
+
+---
+
+Operations
+
+SELECT * FROM V$ASM_OPERATION;
+
+====================================================
+19. MOST IMPORTANT QUERY
+========================
+
+SELECT
+name,
+type,
+allocation_unit_size/1024/1024 au_size_mb,
+total_mb,
+free_mb
+FROM v$asm_diskgroup;
+
+Shows:
+
+* Disk Group
+* Redundancy
+* AU Size
+* Total Space
+* Free Space
+
+====================================================
+20. INTERVIEW QUESTIONS
+=======================
+
+Q. What is ASM?
+
+Oracle's volume manager and file system for databases.
+
+---
+
+Q. What is AU?
+
+Smallest storage unit managed by ASM.
+
+---
+
+Q. What is striping?
+
+Distributing extents across disks for performance.
+
+---
+
+Q. What is mirroring?
+
+Maintaining additional copies for protection.
+
+---
+
+Q. Difference between NORMAL and HIGH redundancy?
+
+NORMAL = 2 copies
+
+HIGH = 3 copies
+
+---
+
+Q. Who performs writes?
+
+DBWR and LGWR.
+
+ASM only manages metadata.
+
+---
+
+Q. What process handles rebalancing?
+
+RBAL and ARBn.
+
+---
+
+Q. Does FRA store ASM mirrors?
+
+No.
+
+Mirrors remain inside the same disk group.
+
+====================================================
+21. MEMORY SHORTCUT
+===================
+
+ASM = Storage Manager
+
+Disk Group = Storage Pool
+
+Disk = Physical Storage
+
+AU = Smallest ASM Unit
+
+Extent = Portion of File
+
+Striping = Performance
+
+Mirroring = Protection
+
+RBAL = Rebalance Coordinator
+
+ARBn = Rebalance Workers
+
+DBWR = Data Writer
+
+LGWR = Redo Writer
+
+DATA = Database Files
+
+FRA = Backup / Recovery Files
+
+OCR = RAC Cluster Metadata
 

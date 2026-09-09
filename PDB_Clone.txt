@@ -1,0 +1,87 @@
+================================================================
+PDB CLONE: RHBUT -> RHB
+================================================================
+
+1. LOGIN AND VERIFY ROOT
+================================================================
+
+SHOW CON_NAME;
+
+ALTER SESSION SET CONTAINER=CDB$ROOT;
+
+
+2. CHECK SOURCE PDB
+================================================================
+
+SELECT NAME, OPEN_MODE
+FROM V$PDBS
+WHERE NAME = 'RHBUT';
+
+-- RHBUT must be OPEN.
+-- If ARCHIVELOG + LOCAL UNDO are enabled, READ WRITE is OK.
+-- Otherwise:
+-- ALTER PLUGGABLE DATABASE RHBUT OPEN READ ONLY;
+
+
+3. INCREASE LIMITS IF REQUIRED
+================================================================
+
+ALTER SYSTEM SET db_files=500 SCOPE=SPFILE;
+ALTER SYSTEM SET max_pdbs=20 SCOPE=SPFILE;
+
+-- Only if specifically required/validated for your SE2 version:
+
+ALTER SYSTEM SET "_cdb_disable_pdb_limit"=TRUE SCOPE=SPFILE;
+
+
+4. RESTART DATABASE
+================================================================
+
+SHUTDOWN IMMEDIATE;
+STARTUP;
+
+SHOW PARAMETER db_files;
+SHOW PARAMETER max_pdbs;
+
+
+5. ENSURE SOURCE PDB IS OPEN
+================================================================
+
+ALTER PLUGGABLE DATABASE RHBUT OPEN;
+
+
+6. CLONE RHBUT -> RHB
+================================================================
+
+CREATE PLUGGABLE DATABASE RHB FROM RHBUT
+FILE_NAME_CONVERT=(
+'/u01/app/oracle/oradata/IMS/RHBUT/','/u01/app/oracle/oradata/IMS/RHB/',
+'/u01/app/oracle/datafiles/RHBUT/','/u01/app/oracle/datafiles/RHB/'
+);
+
+
+7. OPEN CLONED PDB
+================================================================
+
+ALTER PLUGGABLE DATABASE RHB OPEN READ WRITE;
+
+
+8. SAVE STARTUP STATE
+================================================================
+
+ALTER PLUGGABLE DATABASE RHB SAVE STATE;
+
+
+9. VERIFY
+================================================================
+
+SHOW PDBS;
+
+SELECT NAME, OPEN_MODE, STATUS
+FROM V$PDBS
+WHERE NAME IN ('RHBUT','RHB');
+
+
+================================================================
+END OF PDB CLONE PROCEDURE
+================================================================

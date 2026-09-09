@@ -1,0 +1,270 @@
+SET ECHO OFF
+SET FEEDBACK ON
+SET VERIFY OFF
+SET PAGESIZE 50000
+SET LINESIZE 200
+SET TRIMSPOOL ON
+SET SERVEROUTPUT ON
+SET MARKUP HTML ON SPOOL ON ENTMAP ON
+
+COLUMN HOST_NAME          FORMAT A30
+COLUMN INSTANCE_NAME      FORMAT A20
+COLUMN VERSION            FORMAT A20
+COLUMN DATABASE_ROLE      FORMAT A20
+COLUMN OPEN_MODE          FORMAT A25
+COLUMN LOG_MODE           FORMAT A15
+COLUMN COMP_NAME          FORMAT A45
+COLUMN STATUS             FORMAT A15
+COLUMN OWNER              FORMAT A25
+COLUMN OBJECT_TYPE        FORMAT A30
+COLUMN ACTION_TIME        FORMAT A30
+COLUMN PATCH_TYPE         FORMAT A15
+COLUMN ACTION             FORMAT A12
+COLUMN PROCESS            FORMAT A10
+COLUMN VALUE              FORMAT A30
+COLUMN DESTINATION        FORMAT A40
+COLUMN ERROR              FORMAT A40
+COLUMN DESCRIPTION        FORMAT A60
+COLUMN FILENAME           FORMAT A20
+COLUMN VERSION            FORMAT 9999999999
+
+SPOOL Pre_Post_Patch_Report.html
+
+PROMPT ============================================================================
+PROMPT          ORACLE 19c PRE / POST PATCH HEALTH CHECK REPORT
+PROMPT ============================================================================
+
+SELECT TO_CHAR(SYSDATE,'DD-MON-YYYY HH24:MI:SS') "REPORT GENERATED"
+FROM DUAL;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 1. DATABASE INFORMATION
+PROMPT ============================================================================
+
+SELECT
+       NAME,
+       DB_UNIQUE_NAME,
+       DATABASE_ROLE,
+       OPEN_MODE,
+       LOG_MODE,
+       FORCE_LOGGING,
+       FLASHBACK_ON
+FROM V$DATABASE;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 2. INSTANCE INFORMATION
+PROMPT ============================================================================
+
+SELECT
+       INSTANCE_NAME,
+       HOST_NAME,
+       VERSION,
+       STATUS,
+       DATABASE_STATUS,
+       STARTUP_TIME
+FROM V$INSTANCE;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 3. ORACLE VERSION
+PROMPT ============================================================================
+
+SELECT BANNER_FULL
+FROM V$VERSION;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 4. DATABASE COMPONENTS
+PROMPT ============================================================================
+
+SELECT
+       COMP_NAME,
+       VERSION,
+       STATUS
+FROM DBA_REGISTRY
+ORDER BY COMP_NAME;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 5. SQL PATCH REGISTRY
+PROMPT ============================================================================
+
+SELECT
+       PATCH_ID,
+       PATCH_TYPE,
+       DESCRIPTION,
+       ACTION,
+       STATUS,
+       ACTION_TIME
+FROM DBA_REGISTRY_SQLPATCH
+ORDER BY ACTION_TIME;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 6. INVALID OBJECTS
+PROMPT ============================================================================
+
+SELECT
+       OWNER,
+       OBJECT_TYPE,
+       COUNT(*) TOTAL
+FROM DBA_OBJECTS
+WHERE STATUS='INVALID'
+GROUP BY OWNER,OBJECT_TYPE
+ORDER BY OWNER,OBJECT_TYPE;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 7. TABLESPACE USAGE
+PROMPT ============================================================================
+
+SELECT
+       TABLESPACE_NAME,
+       USED_SPACE,
+       TABLESPACE_SIZE,
+       ROUND(USED_PERCENT,2) USED_PERCENT
+FROM DBA_TABLESPACE_USAGE_METRICS
+ORDER BY USED_PERCENT DESC;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 8. DATA GUARD STATISTICS
+PROMPT ============================================================================
+
+SELECT
+       NAME,
+       VALUE,
+       UNIT
+FROM V$DATAGUARD_STATS;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 9. ARCHIVE DESTINATION STATUS
+PROMPT ============================================================================
+
+SELECT
+       DEST_ID,
+       STATUS,
+       ERROR,
+       DESTINATION
+FROM V$ARCHIVE_DEST_STATUS
+WHERE STATUS <> 'INACTIVE';
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 10. MANAGED STANDBY PROCESSES
+PROMPT ============================================================================
+
+SELECT
+       PROCESS,
+       STATUS,
+       THREAD#,
+       SEQUENCE#
+FROM V$MANAGED_STANDBY;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 11. ARCHIVE GAP
+PROMPT ============================================================================
+
+SELECT *
+FROM V$ARCHIVE_GAP;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 12. LAST APPLIED ARCHIVE
+PROMPT ============================================================================
+
+SELECT
+       THREAD#,
+       MAX(SEQUENCE#) LAST_APPLIED
+FROM V$ARCHIVED_LOG
+WHERE APPLIED='YES'
+GROUP BY THREAD#;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 13. LAST GENERATED ARCHIVE
+PROMPT ============================================================================
+
+SELECT
+       THREAD#,
+       MAX(SEQUENCE#) LAST_GENERATED
+FROM V$ARCHIVED_LOG
+GROUP BY THREAD#;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 14. TIME ZONE VERSION
+PROMPT ============================================================================
+
+SELECT
+       FILENAME,
+       VERSION,
+       CON_ID
+FROM V$TIMEZONE_FILE;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 15. CURRENT USER SESSIONS
+PROMPT ============================================================================
+
+SELECT
+       STATUS,
+       COUNT(*) TOTAL
+FROM V$SESSION
+WHERE TYPE='USER'
+GROUP BY STATUS;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 16. ARCHIVE LOG MODE
+PROMPT ============================================================================
+
+ARCHIVE LOG LIST;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 17. INVALID SYS OBJECTS
+PROMPT ============================================================================
+
+SELECT
+       OBJECT_NAME,
+       OBJECT_TYPE
+FROM DBA_OBJECTS
+WHERE OWNER='SYS'
+AND STATUS='INVALID'
+ORDER BY OBJECT_NAME;
+
+PROMPT
+PROMPT ============================================================================
+PROMPT 18. PATCH VALIDATION SUMMARY
+PROMPT ============================================================================
+
+SELECT
+       NAME,
+       DATABASE_ROLE,
+       OPEN_MODE,
+       LOG_MODE
+FROM V$DATABASE;
+
+SELECT
+       COUNT(*) INVALID_OBJECTS
+FROM DBA_OBJECTS
+WHERE STATUS='INVALID';
+
+SELECT
+       COUNT(*) VALID_COMPONENTS
+FROM DBA_REGISTRY
+WHERE STATUS='VALID';
+
+PROMPT
+PROMPT ============================================================================
+PROMPT END OF REPORT
+PROMPT ============================================================================
+
+SPOOL OFF
+
+SET MARKUP HTML OFF

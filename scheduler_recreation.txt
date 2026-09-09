@@ -1,0 +1,45 @@
+set pages 1000
+set lines 220
+
+col owner format a10
+col object_name format a45
+col object_type format a30
+col status format a10
+
+select owner,
+       object_name,
+       object_type,
+       status
+from dba_objects
+where owner='SYS'
+and object_name like '%FILEWATCHER%'
+order by object_name;
+
+
+show errors view SYS.AQ$SCHEDULER_FILEWATCHER_QT
+
+select line,
+       position,
+       text
+from dba_errors
+where owner='SYS'
+and name='AQ$SCHEDULER_FILEWATCHER_QT'
+order by sequence;
+
+
+col name format a40
+
+select name,
+       queue_table,
+       enqueue_enabled,
+       dequeue_enabled
+from dba_queues
+where name like 'SCHEDULER%';
+
+
+select owner,
+       queue_table,
+       object_type,
+       compatible
+from dba_queue_tables
+where queue_table like 'SCHEDULER%';

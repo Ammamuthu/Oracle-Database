@@ -1,0 +1,5 @@
+SQL> oradebug setmypid;
+
+ SQL>analyze table SCHEDULER$_EVENT_LOG validate structure cascade online;      --- Here your SQL query ehatever you want
+
+SQL> oradebug tracefile_name;

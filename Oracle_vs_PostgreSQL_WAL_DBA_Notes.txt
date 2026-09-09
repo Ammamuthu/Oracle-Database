@@ -1,0 +1,215 @@
+Oracle vs PostgreSQL WAL/Redo Notes (DBA Cheat Sheet)
+
+Oracle
+
+-   Online redo logs are typically created in groups (often 3 groups,
+    but not fixed).
+-   Example location: /u01/app/oracle/oradata/ORCL/redo01.log
+-   LGWR writes redo entries from the redo buffer to the current online
+    redo log.
+-   When the current redo log fills, Oracle performs a log switch.
+-   If ARCHIVELOG mode is enabled, ARCn copies the full redo log to the
+    archive destination before it is reused.
+-   Check archive mode: ARCHIVE LOG LIST; SELECT log_mode FROM
+    v$database;
+-   Check archive destination: SHOW PARAMETER log_archive_dest;
+-   Archive logs are used for:
+    -   RMAN recovery
+    -   Disaster Recovery
+    -   Data Guard
+    -   Point-in-Time Recovery (PITR)
+    -   CDC (GoldenGate)
+
+Oracle deletion
+
+-   Never delete online redo logs manually.
+-   Archived logs are deleted using RMAN, e.g. DELETE ARCHIVELOG ALL
+    COMPLETED BEFORE ‘SYSDATE-2’; DELETE OBSOLETE;
+
+------------------------------------------------------------------------
+
+PostgreSQL WAL
+
+WAL = Write Ahead Log.
+
+Flow: Client -> Shared Buffers -> WAL Buffer -> WAL Writer -> pg_wal ->
+Checkpoint -> Data Files
+
+WAL is always written before data files.
+
+Default WAL directory: $PGDATA/pg_wal/
+
+Typical WAL filenames: 000000010000000000000001
+
+Default WAL segment size is usually 16MB (chosen during initdb).
+
+------------------------------------------------------------------------
+
+WAL Archiving
+
+Enable:
+
+archive_mode = on archive_command = ‘cp %p /archive/%f’
+
+%p = full path of WAL file %f = WAL filename
+
+Check: SHOW archive_mode; SHOW archive_command; SELECT * FROM
+pg_stat_archiver;
+
+Archived WAL is used for: - PITR - DR - Base backup recovery - Log
+shipping - Streaming replication - CDC
+
+------------------------------------------------------------------------
+
+pg_wal vs Archive
+
+pg_wal: - Active WAL storage. - Never manually delete files. -
+PostgreSQL recycles/removes files automatically.
+
+Archive directory: - Stores archived WAL. - DBA/backup software manages
+retention. - Use pg_archivecleanup or backup tools (pgBackRest/Barman),
+not blind rm.
+
+------------------------------------------------------------------------
+
+Why pg_wal grows
+
+Normally it should not grow forever.
+
+Reasons: - Replication slot retaining WAL - Standby disconnected -
+Archive command failing - Backup in progress - Large wal_keep_size
+
+Investigate: SELECT * FROM pg_stat_replication; SELECT * FROM
+pg_replication_slots; SELECT * FROM pg_stat_archiver;
+
+Never delete pg_wal manually.
+
+------------------------------------------------------------------------
+
+Why keep WAL after archiving?
+
+Archive success alone is not enough.
+
+PostgreSQL keeps WAL if: - Standby still needs it - Replication slot
+still needs it - Backup still needs it - Archive failed and must retry
+
+Only when nobody needs it is it recycled.
+
+------------------------------------------------------------------------
+
+wal_level
+
+minimal - Crash recovery only
+
+replica (default) - Crash recovery - Physical replication - WAL
+archive - PITR
+
+logical - Everything in replica - Logical replication - CDC (Debezium)
+
+Oracle comparison: logical ~= Supplemental Logging + GoldenGate
+requirements.
+
+Changing wal_level requires restart.
+
+------------------------------------------------------------------------
+
+Important WAL parameters
+
+wal_level -> restart 
+archive_mode -> restart 
+archive_command -> reload
+archive_timeout -> reload 
+max_wal_size -> reload 
+min_wal_size -> reload
+wal_keep_size -> reload 
+wal_buffers -> usually restart
+max_wal_senders -> restart 
+max_replication_slots -> restart
+
+Useful: SHOW parameter_name;
+
+------------------------------------------------------------------------
+
+Configuration
+
+Manual: Edit: $PGDATA/postgresql.conf
+
+ALTER SYSTEM: ALTER SYSTEM SET max_wal_size=‘8GB’;
+
+Stored in: $PGDATA/postgresql.auto.conf
+
+Priority: postgresql.auto.conf overrides postgresql.conf
+
+Reload: SELECT pg_reload_conf();
+
+Restart: systemctl restart postgresql-16 or pg_ctl restart
+
+Check: SELECT name,setting,source,pending_restart FROM pg_settings;
+
+------------------------------------------------------------------------
+
+Oracle vs PostgreSQL
+
+Oracle redo logs = PostgreSQL WAL
+
+LGWR = WAL Writer
+
+ARCn = archive_command
+
+ARCHIVELOG = archive_mode=on
+
+Archived redo = Archived WAL
+
+Data Guard = Physical Streaming Replication
+
+GoldenGate = Logical Replication / Debezium
+
+SCN ~= LSN
+
+RMAN backup = pg_basebackup
+
+expdp = pg_dump
+
+impdp = pg_restore / psql
+
+------------------------------------------------------------------------
+
+Backup
+
+Logical backup: pg_dump No archive_mode required.
+
+Logical restore: pg_restore or psql
+
+Physical backup: pg_basebackup
+
+For PITR: Need archived WAL.
+
+------------------------------------------------------------------------
+
+Remaining important DBA topics
+
+-   Checkpoints
+-   Background Writer vs WAL Writer vs Checkpointer
+-   LSN
+-   full_page_writes
+-   synchronous_commit
+-   Replication Slots
+-   Physical vs Logical Replication
+-   pg_basebackup
+-   PITR
+-   Monitoring views
+-   Vacuum & Autovacuum
+-   Tablespaces
+-   Performance tuning
+
+------------------------------------------------------------------------
+
+Golden Rules
+
+1.  Never delete pg_wal files manually.
+2.  Never delete Oracle online redo logs manually.
+3.  Archived WAL may be deleted only when no longer needed for recovery.
+4.  Use pg_archivecleanup or backup software for archive retention.
+5.  Understand reload vs restart parameters.
+6.  For production DR/PITR: wal_level=replica archive_mode=on
+    archive_command configured.
