@@ -1,0 +1,29 @@
+SELECT 
+    'ALTER INDEX ' || owner || '.' || index_name || ' UNUSABLE;' AS ddl
+FROM 
+    dba_indexes a
+WHERE 
+    status = 'UNUSABLE'
+    AND a.owner IN ('TRANS', 'IMS_MM', 'RTGS_MT', 'RTGS')
+
+UNION ALL
+
+SELECT 
+    'ALTER INDEX ' || index_owner || '.' || index_name ||
+    ' MODIFY PARTITION ' || partition_name || ' UNUSABLE;'
+FROM 
+    dba_ind_partitions a
+WHERE 
+    status = 'UNUSABLE'
+    AND a.index_owner IN ('TRANS', 'IMS_MM', 'RTGS_MT', 'RTGS')
+
+UNION ALL
+
+SELECT 
+    'ALTER INDEX ' || index_owner || '.' || index_name ||
+    ' MODIFY SUBPARTITION ' || subpartition_name || ' UNUSABLE;'
+FROM 
+    dba_ind_subpartitions a
+WHERE 
+    status = 'UNUSABLE'
+    AND a.index_owner IN ('TRANS', 'IMS_MM', 'RTGS_MT', 'RTGS');

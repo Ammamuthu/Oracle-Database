@@ -1,0 +1,376 @@
+-------HWM-----------------
+
+SELECT file_id, file_name, 
+       ceil(nvl(hwm * 8192 / 1024 / 1024, 0)) AS minimum_possible_mb,
+       ceil(bytes / 1024 / 1024) AS current_size_mb
+FROM (
+  SELECT a.file_id, a.file_name, a.bytes,
+         (SELECT MAX(block_id + blocks)
+          FROM dba_extents
+          WHERE file_id = a.file_id) AS hwm
+  FROM dba_data_files a
+);
+
+
+
+SELECT
+    a.tablespace_name,
+    a.file_id,
+    a.file_name,
+    ROUND(a.bytes/1024/1024) AS size_mb,
+    ROUND((a.bytes - NVL(f.bytes,0))/1024/1024) AS used_mb,
+    ROUND(NVL(f.bytes,0)/1024/1024) AS free_mb
+FROM dba_data_files a
+LEFT JOIN (
+    SELECT file_id, SUM(bytes) AS bytes
+    FROM dba_free_space
+    GROUP BY file_id
+) f ON a.file_id = f.file_id
+ORDER BY a.tablespace_name;
+
+
+
+69	IMS_MM_DATA   /u03/app/oracle/datafiles/ARCHDB/IMS_MM_DATA1.DBF		32768	73		32695
+70	IMS_MM_DATA   /home/oracle/ARCH_DATAFILES/IMS_MM_DATA2.DBF			32768	122		32646
+71	IMS_MM_DATA   /u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA3.DBF		32768	209		32559
+50	IMS_MM_DATA   /u03/app/oracle/datafiles/ARCHDB/IMS_MM_DATA.DBF		32768	411		32357
+77	TRANS_DATA    /u04/app/oracle/datafiles/ARCHDB/TRANS_DATA91.dbf		32768	1122	31646
+8	TRANS_DATA    /u04/app/oracle/datafiles/ARCHDB/TRANS_DATA.DBF		32768	1505	31263
+66	TRANS_DATA    /u03/app/oracle/datafiles/ARCHDB/TRANS_DATA1.DBF		32768	1907	30861
+67	TRANS_DATA    /u03/app/oracle/datafiles/ARCHDB/TRANS_DATA2.DBF		32768	2553	30215
+68	TRANS_DATA    /u03/app/oracle/datafiles/ARCHDB/TRANS_DATA3.DBF		32768	3020	29748
+80	TRANS_DATA    /u03/app/oracle/datafiles/ARCHDB/TRANS_DATA4.DBF		29700	3547	26153
+78	IMS_MM_DATA   /u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA99.dbf	17200	1495	15705
+79	IMS_MM_DATA   /u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA98.dbf	16650	1414	15236
+56	RTGS_MT_DAT   /u01/app/oracle/datafiles/ARCHDB/RTGS_MT_DATA.DBF		14140	27		14113
+81	TRANS_DATA    /u04/app/oracle/datafiles/ARCHDB/TRANS_DATA5.dbf		22600	8817	13783
+
+
+-- IMS_MM_DATA tablespace
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/ARCHDB/IMS_MM_DATA1.DBF' RESIZE 173M;
+ALTER DATABASE DATAFILE '/home/oracle/ARCH_DATAFILES/IMS_MM_DATA2.DBF' RESIZE 222M;
+ALTER DATABASE DATAFILE '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA3.DBF' RESIZE 309M;
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/ARCHDB/IMS_MM_DATA.DBF' RESIZE 511M;
+ALTER DATABASE DATAFILE '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA99.dbf' RESIZE 1595M;
+ALTER DATABASE DATAFILE '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA98.dbf' RESIZE 1514M;
+
+-- TRANS_DATA tablespace
+ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/ARCHDB/TRANS_DATA91.dbf' RESIZE 1222M;
+ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/ARCHDB/TRANS_DATA.DBF' RESIZE 1605M;
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/ARCHDB/TRANS_DATA1.DBF' RESIZE 2007M;
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/ARCHDB/TRANS_DATA2.DBF' RESIZE 2653M;
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/ARCHDB/TRANS_DATA3.DBF' RESIZE 3120M;
+ALTER DATABASE DATAFILE '/u03/app/oracle/datafiles/ARCHDB/TRANS_DATA4.DBF' RESIZE 3647M;
+ALTER DATABASE DATAFILE '/u04/app/oracle/datafiles/ARCHDB/TRANS_DATA5.dbf' RESIZE 8917M;
+
+-- RTGS_MT_DATA tablespace
+ALTER DATABASE DATAFILE '/u01/app/oracle/datafiles/ARCHDB/RTGS_MT_DATA.DBF' RESIZE 3G;
+
+
+
+ps -p 27636 -o pid,etime,cmd
+
+
+    SELECT tablespace_name, sum(bytes)/1024/1024 AS current_size_mb,
+           sum(user_bytes)/1024/1024 AS used_size_mb
+    FROM dba_data_files
+    GROUP BY tablespace_name
+    HAVING tablespace_name = 'RTGS_MT_DATA'; -- Replace with actual tablespace name
+	
+	
+	
+	
+COLUMN owner FORMAT A30
+COLUMN segment_name FORMAT A30
+COLUMN tablespace_name FORMAT A30
+
+SELECT * FROM (SELECT segment_type, segment_name, owner, tablespace_name, bytes/1024/1024 size_mb 
+FROM dba_segments ORDER BY 5 DESC)
+WHERE  ROWNUM <= 20;
+
+
+SEGMENT_TYPE       SEGMENT_NAME                   OWNER                          TABLESPACE_NAME                   SIZE_MB
+------------------ ------------------------------ ------------------------------ ------------------------------ ----------
+TABLE              OPTSTAT_SNAPSHOT$              SYS                            SYSTEM                               5571
+INDEX              I_OPTSTAT_SNAPSHOT$            SYS                            SYSTEM                               3904
+TABLE              DJ_ENTITY_PERSON               COMPLIANCE                     COMPLIANCE_DATA                  2456.125
+TABLE              IBG_STAND_FILE_CARDPRO         ENRICH                         ENRICH_DATA                          1728
+TABLE PARTITION    EMAIL_HISTORY_DTLS             TRANS                          TRANS_DATA                           1536
+LOBSEGMENT         SYS_LOB0000387067C00007$$      COMPLIANCE                     COMPLIANCE_DATA                 1152.1875
+TABLE              DJ_TMP_ENTITY_PERSON           COMPLIANCE                     COMPLIANCE_DATA                      1024
+SYSTEM STATISTICS  HEATMAP                        SYS                            SYSAUX                                796
+TABLE SUBPARTITION DJ_NAME_RECS                   COMPLIANCE                     COMPLIANCE_DATA                       616
+LOBSEGMENT         SYS_LOB0000022516C00008$$      SYS                            SYSTEM                                560
+TABLE              WRI$_ADV_OBJECTS               SYS                            SYSAUX                                496
+TABLE              DJ_ASSOCIATIONS                COMPLIANCE                     COMPLIANCE_DATA                       496
+TABLE              DJ_SOURCE_DESCR                COMPLIANCE                     COMPLIANCE_DATA                       456
+TABLE              IDL_UB1$                       SYS                            SYSTEM                                412
+TABLE              DJ_TMP_NAME_RECS               COMPLIANCE                     COMPLIANCE_DATA                       406
+LOBSEGMENT         SYS_LOB0000387198C00007$$      COMPLIANCE                     COMPLIANCE_DATA                  368.1875
+TABLE SUBPARTITION DJ_NAME_RECS                   COMPLIANCE                     COMPLIANCE_DATA                       344
+INDEX              I_OBJ2                         SYS                            SYSTEM                                328
+INDEX              I_OBJ5                         SYS                            SYSTEM                                328
+CLUSTER            C_OBJ#_INTCOL#                 SYS                            SYSTEM                                312
+
+20 rows selected.
+
+
+SELECT
+    segment_name,
+    ROUND(SUM(bytes) / (1024 * 1024)) AS MB
+FROM
+    dba_segments
+WHERE
+    segment_name = 'RTGS_IN_REPOSITORY' -- Replace with your table name
+    AND segment_type = 'TABLE'
+	AND OWNER = 'RTGS_MT'
+GROUP BY
+    segment_name;
+	
+	
+	-------------------------------------
+	
+	
+	SQL> ALTER DATABASE DATAFILE '/home/oracle/ARCH_DATAFILES/IMS_MM_DATA2.DBF' RESIZE 2G;
+  2  ;
+ALTER DATABASE DATAFILE '/home/oracle/ARCH_DATAFILES/IMS_MM_DATA2.DBF' RESIZE 222M
+*
+ERROR at line 1:
+ORA-03297: file contains used data beyond requested RESIZE value
+
+
+SELECT DISTINCT owner, segment_name
+FROM dba_extents
+WHERE file_id = 56
+ORDER BY owner, segment_name;
+
+OWNER                SEGMENT_NAME
+-------------------- -----------------------------------
+RTGS_MT              EVENT_DESC
+RTGS_MT              MV_RTGS_OUT_MANUAL
+RTGS_MT              MV_TMPL_RTGS_MASTER
+RTGS_MT              MYMT_APPROVAL_STATUS
+RTGS_MT              RTGS_APPROVAL_STATUS
+
+
+ALTER TABLESPACE your_tablespace SHRINK SPACE;
+
+
+
+
+SELECT
+    segment_name,
+    ROUND(SUM(bytes) / 1024 / 1024, 2) AS size_mb
+FROM
+    dba_segments
+WHERE
+    owner = 'RTGS_MT'
+    AND segment_name IN (
+'EVENT_DESC',
+'IDX_204_SEQ_DTL_ID',
+'IDX_RTGS_910_DTLS_OUT_MSG_ID',
+'IDX_RTGS_EVENT_IN_MSG_ID',
+'IDX_RTGS_TRK_CHNGS_MSG_ID',
+'I_SNAP$_MV_RTGS_OUT_MANUAL',
+'MV_RTGS_OUT_MANUAL',
+'MV_TMPL_RTGS_MASTER',
+'MYMT_APPROVAL_STATUS',
+'PK_RTGS_101_TRANS_DTLS_ID',
+'PK_RTGS_102_DTLS_DTL_ID',
+'PK_RTGS_102_TRANS_DTLS_ID',
+'PK_RTGS_103_DTLS_DTL_ID',
+'PK_RTGS_198_DTL_ID',
+'PK_RTGS_202_DTLS_DTL_ID',
+'PK_RTGS_203DTLS_MSG_DTL_ID',
+'PK_RTGS_204_DTLS_R01',
+'PK_RTGS_298_DTL_ID',
+'PK_RTGS_910_DTLS_DTL_ID',
+'PK_RTGS_ACK_EVENT_LOG_ID',
+'PK_RTGS_ACK_REP_MSG_ID',
+'PK_RTGS_AUDIT_TRAIL_ID',
+'PK_RTGS_EVENT_LOG_ID',
+'PK_RTGS_IN_EVENT_LOG_ID',
+'PK_RTGS_IN_REP_MSG_ID',
+'PK_RTGS_OUT_MSGS_DTL_ID',
+'PK_RTGS_OUT_REP_MSG_ID',
+'PK_RTGS_TRACK_CHANGE_ID',
+'RTGS_203_SEQ_PK',
+'RTGS_204_DTLS',
+'RTGS_204_SEQ',
+'RTGS_204_SEQ_PK',
+'RTGS_AML_RPT_PK',
+'RTGS_APPROVAL_STATUS',
+'RTGS_IN_REPOSITOR277_PARTTN_DT',
+'RTGS_IN_REPOSITORY',
+'RTGS_TRACK_CHANGES',
+'SYS_IL0000442397C00008$$',
+'SYS_IL0000442397C00013$$',
+'SYS_IL0000442397C00019$$',
+'SYS_IL0000442397C00034$$',
+'SYS_LOB0000442397C00008$$',
+'SYS_LOB0000442397C00013$$',
+'SYS_LOB0000442397C00019$$',
+'SYS_LOB0000442397C00034$$'
+    )
+GROUP BY
+    segment_name
+ORDER BY
+    size_mb DESC;
+
+
+SELECT
+  (SELECT COUNT(*) FROM dba_tab_partitions
+   WHERE table_owner = 'RTGS_MT' AND table_name = 'RTGS_IN_REPOSITORY') AS PARTITION_COUNT,
+  (SELECT COUNT(*) FROM dba_tab_subpartitions
+   WHERE table_owner = 'RTGS_MT' AND table_name = 'RTGS_IN_REPOSITORY') AS SUBPARTITION_COUNT,
+  (SELECT COUNT(*) FROM dba_lob_partitions
+   WHERE table_owner = 'RTGS_MT' AND table_name = 'RTGS_IN_REPOSITORY') AS LOB_PARTITION_COUNT
+FROM dual;
+
+
+SELECT 
+    segment_type,
+    ROUND(SUM(bytes)/1024/1024, 2) AS total_size_mb
+FROM 
+    dba_segments
+WHERE 
+    tablespace_name = 'RTGS_MT_DATA'
+GROUP BY 
+    segment_type
+ORDER BY 
+    total_size_mb DESC;
+
+
+SELECT MAX(block_id + blocks - 1) AS max_used_block
+FROM dba_extents
+WHERE file_id = <your_file_id>;
+
+
+SELECT 4150559 * block_size / 1024 / 1024 AS required_file_size_mb
+FROM (SELECT value AS block_size FROM v$parameter WHERE name = 'db_block_size');
+
+
+SELECT MAX(block_id + blocks - 1) AS max_used_block
+FROM dba_extents
+WHERE file_id = <your_file_id>;
+
+SELECT owner, segment_name, segment_type, block_id, blocks,
+       block_id + blocks - 1 AS end_block
+FROM dba_extents
+WHERE file_id = 56
+ORDER BY block_id DESC
+FETCH FIRST 10 ROWS ONLY;
+
+set linesize 1000 pagesize 0 feedback off trimspool on
+with
+ hwm as (
+  -- get highest block id from each datafiles ( from x$ktfbue as we don't need all joins from dba_extents )
+  select /*+ materialize */ ktfbuesegtsn ts#,ktfbuefno relative_fno,max(ktfbuebno+ktfbueblks-1) hwm_blocks
+  from sys.x$ktfbue group by ktfbuefno,ktfbuesegtsn
+ ),
+ hwmts as (
+  -- join ts# with tablespace_name
+  select name tablespace_name,relative_fno,hwm_blocks
+  from hwm join v$tablespace using(ts#)
+ ),
+ hwmdf as (
+  -- join with datafiles, put 5M minimum for datafiles with no extents
+  select file_name,nvl(hwm_blocks*(bytes/blocks),5*1024*1024) hwm_bytes,bytes,autoextensible,maxbytes
+  from hwmts right join dba_data_files using(tablespace_name,relative_fno)
+ )
+select
+ case when autoextensible='YES' and maxbytes>=bytes
+ then -- we generate resize statements only if autoextensible can grow back to current size
+  '/* reclaim '||to_char(ceil((bytes-hwm_bytes)/1024/1024),999999)
+   ||'M from '||to_char(ceil(bytes/1024/1024),999999)||'M */ '
+   ||'alter database datafile '''||file_name||''' resize '||ceil(hwm_bytes/1024/1024)||'M;'
+ else -- generate only a comment when autoextensible is off
+  '/* reclaim '||to_char(ceil((bytes-hwm_bytes)/1024/1024),999999)
+   ||'M from '||to_char(ceil(bytes/1024/1024),999999)
+   ||'M after setting autoextensible maxsize higher than current size for file '
+   || file_name||' */'
+ end SQL
+from hwmdf
+where
+ bytes-hwm_bytes>1024*1024 -- resize only if at least 1MB can be reclaimed
+order by bytes-hwm_bytes desc
+/
+
+/* reclaim    7455M from   29700M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/TRANS_DATA4.DBF' resize 22246M;
+/* reclaim    7453M from   17200M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA99.dbf' resize 9748M;
+/* reclaim    2862M from   22600M */ alter database datafile '/u04/app/oracle/datafiles/ARCHDB/TRANS_DATA5.dbf' resize 19739M;
+/* reclaim     986M from   32768M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA3.DBF' resize 31783M;
+/* reclaim     526M from    4140M */ alter database datafile '/u01/app/oracle/oradata/ARCHDB/undotbs01.dbf' resize 3615M;
+/* reclaim     478M from    9950M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/COMPLIANCE_DATA.DBF' resize 9473M;
+/* reclaim     347M from   16650M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA98.dbf' resize 16304M;
+/* reclaim     342M from   32768M */ alter database datafile '/home/oracle/ARCH_DATAFILES/IMS_MM_DATA2.DBF' resize 32427M;
+/* reclaim     175M from    1650M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_DATA100.dbf' resize 1476M;
+/* reclaim     128M from    5590M */ alter database datafile '/u01/app/oracle/oradata/ARCHDB/sysaux01.dbf' resize 5463M;
+/* reclaim     103M from    2120M */ alter database datafile '/u04/app/oracle/datafiles/ARCHDB/enrich_data.dbf' resize 2018M;
+/* reclaim      77M from    1470M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CRT_MANUAL_DATA.DBF' resize 1394M;
+/* reclaim      49M from     860M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_INDX.DBF' resize 812M;
+/* reclaim      29M from     540M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/RTGS_DATA.DBF' resize 512M;
+/* reclaim      13M from   32768M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/IMS_MM_DATA.DBF' resize 32756M;
+/* reclaim      11M from     220M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/MM_CONFIG_DATA.DBF' resize 210M;
+/* reclaim      10M from   13880M */ alter database datafile '/u01/app/oracle/oradata/ARCHDB/system01.dbf' resize 13871M;
+/* reclaim       9M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CONFIG_INDX.DBF' resize 2M;
+/* reclaim       9M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CRT_MANUAL_INDX.DBF' resize 2M;
+/* reclaim       8M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_MM_INDX.DBF' resize 3M;
+/* reclaim       8M from      80M */ alter database datafile '/u04/app/oracle/datafiles/ARCHDB/CONFIG_DATA.DBF' resize 73M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_TABLES_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RENT_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RENT_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_DASH_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RTGS_MT_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/PREPRO_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_VENDOR_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/COMPLIANCE_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_DASH_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RTGS_MT_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RTGS_MT_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/RTGS_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/RTGS_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_SWIFT_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_RECON_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_FIX_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/PREPRO_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_FIX_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CORP_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/NACHA_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_MSG_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CORP_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/NACHA_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_RECON_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_RPT_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_SWIFT_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_VENDOR_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RENT_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CORP_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/PREPRO_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CORP_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_RECON_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/MM_CONFIG_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_DOCS_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RECON_CONFIG_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/TRANS_MSG_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RTGS_MT_ARC.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/enrich_indx.dbf' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/RECON_CONFIG_DATA.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_DOCS_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_RECON_INDX.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/NACHA_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_RECON_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/RTGS_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/NACHA_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_DASH_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/CORP_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_LIVE.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u01/app/oracle/datafiles/ARCHDB/IMS_DOCS_ACT.DBF' resize 5M;
+/* reclaim       5M from      10M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/RTGS_ACT.DBF' resize 5M;
+/* reclaim       2M from   32768M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/IMS_MM_DATA1.DBF' resize 32767M;
+/* reclaim       2M from   32768M */ alter database datafile '/u03/app/oracle/datafiles/ARCHDB/TRANS_DATA2.DBF' resize 32767M;
+/* reclaim       2M from       5M */ alter database datafile '/u01/app/oracle/oradata/ARCHDB/users01.dbf' resize 4M;
+SQL>
+

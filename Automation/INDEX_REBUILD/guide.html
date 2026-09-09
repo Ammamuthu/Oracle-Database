@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { margin: 22mm 18mm; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2430; font-size: 10.5pt; line-height: 1.55; }
+  h1 { color: #0c447c; font-size: 22pt; margin-bottom: 2mm; }
+  h2 { color: #0c447c; font-size: 15pt; border-bottom: 2px solid #185fa5; padding-bottom: 2mm; margin-top: 10mm; page-break-after: avoid; }
+  h3 { color: #185fa5; font-size: 12.5pt; margin-top: 6mm; page-break-after: avoid; }
+  .cover { text-align: center; padding-top: 55mm; page-break-after: always; }
+  .cover h1 { font-size: 28pt; }
+  .cover .sub { font-size: 13pt; color: #5f5e5a; margin-top: 4mm; }
+  .cover .meta { margin-top: 30mm; font-size: 10pt; color: #888780; }
+  .meta table { margin: 0 auto; }
+  table { border-collapse: collapse; width: 100%; margin: 4mm 0; font-size: 9.5pt; }
+  th { background: #0c447c; color: #fff; text-align: left; padding: 2.2mm 3mm; }
+  td { border: 1px solid #d3d1c7; padding: 2mm 3mm; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f6f2; }
+  code { background: #eef1f5; border: 1px solid #d3d1c7; border-radius: 3px; padding: 0.5mm 1.5mm; font-family: Consolas, 'Courier New', monospace; font-size: 9pt; }
+  pre { background: #10243d; color: #dbe7f5; padding: 4mm; border-radius: 4px; font-family: Consolas, 'Courier New', monospace; font-size: 8.7pt; line-height: 1.45; overflow-x: auto; page-break-inside: avoid; }
+  pre code { background: none; border: none; color: inherit; padding: 0; }
+  .callout { border-left: 4px solid #185fa5; background: #e6f1fb; padding: 3mm 5mm; margin: 4mm 0; border-radius: 0 4px 4px 0; }
+  .warn { border-left: 4px solid #a32d2d; background: #fcebeb; padding: 3mm 5mm; margin: 4mm 0; border-radius: 0 4px 4px 0; }
+  .step { border: 1px solid #d3d1c7; border-radius: 6px; padding: 4mm 5mm; margin: 4mm 0; page-break-inside: avoid; }
+  .step h4 { margin: 0 0 2mm 0; color: #0c447c; font-size: 11pt; }
+  .flow { display: flex; flex-direction: column; align-items: center; margin: 6mm 0; }
+  .flow .box { border: 1px solid #185fa5; background: #e6f1fb; color: #0c447c; border-radius: 6px; padding: 3mm 6mm; width: 78%; text-align: center; font-size: 10pt; font-weight: bold; }
+  .flow .box .sub { display: block; font-weight: normal; font-size: 8.7pt; color: #185fa5; margin-top: 1mm; }
+  .flow .arrow { font-size: 12pt; color: #185fa5; margin: 1mm 0; }
+  .chk { list-style: none; padding-left: 0; }
+  .chk li { padding: 1.5mm 0 1.5mm 7mm; position: relative; }
+  .chk li:before { content: "\2610"; position: absolute; left: 0; color: #185fa5; }
+  .toc a { color: #0c447c; text-decoration: none; }
+  .toc-item { display: flex; justify-content: space-between; border-bottom: 1px dotted #d3d1c7; padding: 1.5mm 0; }
+  .small { font-size: 8.7pt; color: #5f5e5a; }
+  .tag { display: inline-block; background: #f9cb42; color: #412402; border-radius: 3px; padding: 0.5mm 2mm; font-size: 8.5pt; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Index Rebuild Utility</h1>
+  <div class="sub">Detailed guide, code walkthrough &amp; operational runbook</div>
+  <div class="sub">Table: IMS_MM.MYMT_OUT_REPOSITORY &nbsp;|&nbsp; Oracle 19c</div>
+  <div class="meta">
+    <table>
+      <tr><td class="small">Prepared for</td><td>IMS_MM DBA team</td></tr>
+      <tr><td class="small">Audience</td><td>Junior DBA / on-call operator</td></tr>
+      <tr><td class="small">Scope</td><td>Index / partition / subpartition rebuild only (no data MOVE)</td></tr>
+    </table>
+  </div>
+</div>
+
+<h1 style="margin-top:0;">Contents</h1>
+<div class="toc">
+  <div class="toc-item"><span>1. Overview</span><span>3</span></div>
+  <div class="toc-item"><span>2. Files and run order</span><span>3</span></div>
+  <div class="toc-item"><span>3. Fix required before first run</span><span>4</span></div>
+  <div class="toc-item"><span>4. State table reference</span><span>4</span></div>
+  <div class="toc-item"><span>5. Code walkthrough, block by block</span><span>5</span></div>
+  <div class="toc-item"><span>6. Known limitation: SYS_IL system LOB indexes</span><span>7</span></div>
+  <div class="toc-item"><span>7. Troubleshooting reference</span><span>8</span></div>
+  <div class="toc-item"><span>8. RUNBOOK: step-by-step execution</span><span>9</span></div>
+  <div class="toc-item"><span>9. FAQ</span><span>11</span></div>
+</div>
+
+<h2 id="overview">1. Overview</h2>
+<p>This utility finds every <code>UNUSABLE</code> index, index partition, index subpartition,
+LOB index, LOB index partition, and LOB index subpartition on one table, and rebuilds each
+one. It is <strong>rebuild-only</strong> &mdash; it never moves table data or partitions.</p>
+<p>Every attempt is logged to a state table, <code>index_rebuild_status</code>. Once an object
+reaches <code>status = 'SUCCESS'</code>, later runs skip it permanently. Anything that failed is
+retried automatically the next time the procedure runs. This makes the job safe to re-run if it
+is interrupted partway through a large table.</p>
+
+<h2 id="files">2. Files and run order</h2>
+<table>
+  <tr><th>File</th><th>Purpose</th><th>Run how often</th></tr>
+  <tr><td><code>Create_Mointor_Table.sql</code></td><td>Creates <code>index_rebuild_status</code>, the state/memory table</td><td>Once, ever</td></tr>
+  <tr><td><code>INX_REBUILD_PROC.sql</code></td><td>Creates the <code>rebuild_indexes</code> procedure</td><td>Once, or whenever edited</td></tr>
+  <tr><td><code>Pre_requesties.sql</code></td><td>Reports current USABLE / UNUSABLE counts as HTML</td><td>Before <strong>and</strong> after every rebuild run</td></tr>
+  <tr><td><code>Initiate_and_Monitor.sql</code></td><td>Grants DBA view access, runs the procedure, revokes access, shows progress</td><td>Every rebuild run</td></tr>
+</table>
+
+<div class="flow">
+  <div class="box">1. Pre-check status<span class="sub">Run Pre_requesties.sql (before)</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="box">2. Grant DBA access<span class="sub">SELECT on DBA_* views to IMS_MM</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="box">3. Rebuild indexes<span class="sub">EXEC rebuild_indexes procedure</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="box">4. Revoke DBA access<span class="sub">Remove the temporary grants</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="box">5. Post-check + HTML report<span class="sub">Run Pre_requesties.sql (after)</span></div>
+</div>
+
+<h2 id="fix">3. Fix required before first run</h2>
+<div class="warn">
+<strong>Bug in <code>Initiate_and_Monitor.sql</code>:</strong> the grant statements use
+<code>FROM</code> instead of <code>TO</code>. <code>GRANT</code> always takes <code>TO</code>;
+<code>FROM</code> is only valid on <code>REVOKE</code>. As written, this line errors immediately.
+</div>
+<pre><code>-- WRONG (as currently written)
+GRANT SELECT ON DBA_INDEXES FROM IMS_MM;
+
+-- CORRECT
+GRANT SELECT ON DBA_INDEXES TO IMS_MM;
+GRANT SELECT ON DBA_IND_PARTITIONS TO IMS_MM;
+GRANT SELECT ON DBA_IND_SUBPARTITIONS TO IMS_MM;</code></pre>
+<p>The <code>REVOKE</code> lines further down are already correct as <code>REVOKE ... FROM IMS_MM</code>.</p>
+<p><strong>Why this grant is needed:</strong> the procedure is owned by <code>IMS_MM</code> and
+reads <code>DBA_INDEXES</code> / <code>DBA_IND_PARTITIONS</code> / <code>DBA_IND_SUBPARTITIONS</code>.
+A stored procedure only honors privileges granted <em>directly</em> to its owner &mdash; privileges
+that arrive through a role such as <code>SELECT_CATALOG_ROLE</code> do not apply inside PL/SQL. That
+is why the grant/revoke wrapper exists: give <code>IMS_MM</code> temporary direct access, run the
+job, remove it again.</p>
+
+<h2 id="statetable">4. State table reference &mdash; index_rebuild_status</h2>
+<p>One row per object attempted, ever.</p>
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td><code>id</code></td><td>Auto-numbered row id (identity column)</td></tr>
+  <tr><td><code>owner</code>, <code>table_name</code>, <code>index_name</code></td><td>Which index, on which table</td></tr>
+  <tr><td><code>index_kind</code></td><td><code>NORMAL</code> or <code>LOB</code></td></tr>
+  <tr><td><code>partition_name</code></td><td>Filled only for a partition-level rebuild</td></tr>
+  <tr><td><code>subpartition_name</code></td><td>Filled only for a subpartition-level rebuild</td></tr>
+  <tr><td><code>status</code></td><td><code>SUCCESS</code> or <code>FAILED</code></td></tr>
+  <tr><td><code>start_time</code> / <code>end_time</code></td><td>When that rebuild attempt ran</td></tr>
+  <tr><td><code>error_message</code></td><td>Oracle error text, populated only when <code>status = FAILED</code></td></tr>
+</table>
+<div class="callout">The unique index in <code>Create_Mointor_Table.sql</code> is currently
+<strong>commented out</strong>. The procedure still works correctly without it (it checks for an
+existing row before inserting), but nothing in the database <em>enforces</em> one row per object.
+Consider uncommenting it once the logic has been validated in your environment.</div>
+
+<h2 id="walkthrough">5. Code walkthrough, block by block</h2>
+
+<h3>5.1 Parameters</h3>
+<pre><code>PROCEDURE rebuild_indexes (
+  p_owner        IN VARCHAR2,
+  p_table        IN VARCHAR2,
+  p_parallel     IN NUMBER DEFAULT 16,
+  p_parallel_lob IN NUMBER DEFAULT NULL
+)</code></pre>
+<table>
+  <tr><th>Parameter</th><th>Meaning</th></tr>
+  <tr><td><code>p_owner</code>, <code>p_table</code></td><td>Which table to work on</td></tr>
+  <tr><td><code>p_parallel</code></td><td>Degree of parallelism for <strong>regular</strong> index rebuilds. Default 16.</td></tr>
+  <tr><td><code>p_parallel_lob</code></td><td>Degree of parallelism for <strong>LOB</strong> index rebuilds. Default <code>NULL</code> &mdash; no <code>PARALLEL</code> clause at all. Pass a value to enable it.</td></tr>
+</table>
+
+<h3>5.2 The local helper: run_and_log</h3>
+<p>Declared <em>inside</em> <code>rebuild_indexes</code>, so it is not a separate database object
+&mdash; just reusable logic that all six discovery loops below call, instead of repeating the same
+lines six times. For one object it does four things, in order:</p>
+<ol>
+  <li><strong>Check if already done.</strong> <code>SELECT COUNT(*) ... WHERE status = 'SUCCESS'</code>. If found, print <span class="tag">SKIP</span> and return immediately.</li>
+  <li><strong>Run the DDL.</strong> <code>EXECUTE IMMEDIATE p_sql</code>, where <code>p_sql</code> is the <code>ALTER INDEX ... REBUILD [PARTITION|SUBPARTITION]</code> statement built by the calling loop.</li>
+  <li><strong>On success</strong> &mdash; <code>MERGE</code> a row into <code>index_rebuild_status</code> with <code>status = 'SUCCESS'</code>. <code>MERGE</code> updates the row if one already exists (e.g. a retry after a prior <code>FAILED</code>), otherwise inserts a new one.</li>
+  <li><strong>On failure</strong> &mdash; caught by <code>EXCEPTION WHEN OTHERS</code>. The error text is copied into a local variable first, then <code>MERGE</code>d in with <code>status = 'FAILED'</code>. The exception is <strong>not re-raised</strong> &mdash; deliberate, so one bad index never stops the whole batch.</li>
+</ol>
+<div class="callout">
+<strong>Why capture <code>SQLERRM</code> into a variable first?</strong> <code>SQLERRM</code> is a
+PL/SQL function &mdash; it only works inside PL/SQL code, not directly inside a SQL statement's
+<code>VALUES</code>/<code>SET</code> clause. <code>v_err := SQLERRM;</code> then using
+<code>v_err</code> in the <code>MERGE</code> is the standard workaround.
+</div>
+
+<h3>5.3 The six discovery loops</h3>
+<p>Each loop has the same shape: query the dictionary for objects in one category with
+<code>status = 'UNUSABLE'</code>, then call <code>run_and_log</code> for each one found.</p>
+<table>
+  <tr><th>#</th><th>Category</th><th>Source view(s)</th><th>DDL shape</th></tr>
+  <tr><td>1</td><td>Non-partitioned regular index</td><td><code>dba_indexes</code></td><td><code>ALTER INDEX ... REBUILD</code></td></tr>
+  <tr><td>2</td><td>Non-partitioned LOB index</td><td><code>dba_indexes</code> (<code>index_type = 'LOB'</code>)</td><td><code>ALTER INDEX ... REBUILD</code></td></tr>
+  <tr><td>3</td><td>Regular index partition</td><td><code>dba_indexes</code> + <code>dba_ind_partitions</code></td><td><code>ALTER INDEX ... REBUILD PARTITION x</code></td></tr>
+  <tr><td>4</td><td>Regular index subpartition</td><td><code>dba_indexes</code> + <code>dba_ind_subpartitions</code></td><td><code>ALTER INDEX ... REBUILD SUBPARTITION x</code></td></tr>
+  <tr><td>5</td><td>LOB index partition</td><td><code>dba_indexes</code> + <code>dba_ind_partitions</code></td><td><code>ALTER INDEX ... REBUILD PARTITION x</code></td></tr>
+  <tr><td>6</td><td>LOB index subpartition</td><td><code>dba_indexes</code> + <code>dba_ind_subpartitions</code></td><td><code>ALTER INDEX ... REBUILD SUBPARTITION x</code></td></tr>
+</table>
+<p class="small">Nothing is rebuilt unless it is actually <code>UNUSABLE</code>. A healthy table
+with no broken indexes will run the procedure and log nothing at all &mdash; that is correct,
+expected behavior, not a bug.</p>
+
+<h3>5.4 Per-object decision logic</h3>
+<div class="flow">
+  <div class="box">Unusable object found</div>
+  <div class="arrow">&#8595;</div>
+  <div class="box">Already SUCCESS logged?<span class="sub">checked in index_rebuild_status</span></div>
+  <div class="arrow">&#8595; no &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; yes &#8594; Skip</div>
+  <div class="box">Execute rebuild DDL<span class="sub">ALTER INDEX ... REBUILD</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="box">Success &#8658; log SUCCESS + timing &nbsp;&nbsp;|&nbsp;&nbsp; Failed &#8658; log FAILED + error text</div>
+</div>
+
+<h2 id="limitation">6. Known limitation: system-generated LOB indexes</h2>
+<div class="warn">
+<strong>Observation:</strong> Oracle's system-generated LOB indexes
+(named <code>SYS_IL...$$</code>) fail during <code>ALTER INDEX ... REBUILD</code> with:
+<pre style="margin-top:2mm;"><code>ORA-02327: cannot create index on expression with datatype LOB</code></pre>
+</div>
+<p>This is <strong>expected Oracle behavior</strong>, not a defect in this utility. Oracle does not
+support rebuilding a system-generated LOB index directly with <code>ALTER INDEX ... REBUILD</code>.
+The only supported way to reorganize it is:</p>
+<pre><code>ALTER TABLE owner.table_name MOVE LOB(lob_column) LOB SEGMENT_NAME
+  ( TABLESPACE tbs_name ... );</code></pre>
+<p><code>ALTER TABLE ... MOVE LOB</code> rebuilds the LOB segment, and Oracle automatically
+maintains the associated <code>SYS_IL...$$</code> index as part of that operation &mdash; it is
+never rebuilt directly.</p>
+<p><strong>What this means operationally:</strong> if <code>run_and_log</code> encounters one of
+these system LOB indexes, it catches <code>ORA-02327</code>, logs <code>status = 'FAILED'</code>
+with that error text, and moves on to the next object rather than stopping the batch. A
+<code>FAILED</code> row with <code>ORA-02327</code> in <code>error_message</code> is
+<strong>not</strong> something to fix by rerunning this procedure &mdash; it requires a
+<code>MOVE LOB</code> operation, which is outside the scope of an index-only rebuild and should be
+scheduled separately with the appropriate maintenance window.</p>
+
+<h2 id="troubleshooting">7. Troubleshooting reference</h2>
+<table>
+  <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+  <tr><td><code>ORA-00942: table or view does not exist</code> when compiling the procedure</td><td><code>IMS_MM</code> lacks direct grants on the <code>DBA_*</code> views (role-based access does not apply inside stored procedures)</td><td>Run the <code>GRANT ... TO IMS_MM</code> statements as SYSDBA, then <code>ALTER PROCEDURE ... COMPILE</code></td></tr>
+  <tr><td><code>PLS-00364: loop index variable 'R' use is invalid</code></td><td>Fallout from the <code>ORA-00942</code> above &mdash; the cursor's <code>SELECT</code> failed to resolve, so <code>r</code> was never valid</td><td>Same fix as above; clears automatically once grants are in place</td></tr>
+  <tr><td><code>ORA-00904: "SQLERRM": invalid identifier</code></td><td><code>SQLERRM</code> used directly inside a SQL statement</td><td>Capture into a local variable first, then use the variable in the SQL (already fixed in current version)</td></tr>
+  <tr><td>Procedure runs, <code>index_rebuild_status</code> has 0 new rows</td><td>Nothing was <code>UNUSABLE</code> at run time &mdash; correct, expected outcome</td><td>Run <code>Pre_requesties.sql</code> to confirm current status</td></tr>
+  <tr><td>Row shows <code>FAILED</code> with <code>ORA-02327</code></td><td>System-generated LOB index (<code>SYS_IL...$$</code>)</td><td>See Section 6 &mdash; requires <code>ALTER TABLE ... MOVE LOB</code>, not a rerun</td></tr>
+</table>
+
+<h2 id="runbook">8. RUNBOOK &mdash; step-by-step execution</h2>
+<p class="small">Follow in order. Each step lists the command, what to check before moving on,
+and what to do if it fails.</p>
+
+<div class="step">
+<h4>Step 0 &mdash; Pre-flight checklist</h4>
+<ul class="chk">
+  <li>Confirm the target table name and owner: <code>IMS_MM.MYMT_OUT_REPOSITORY</code></li>
+  <li>Confirm you have SYSDBA or equivalent access for the grant/revoke steps</li>
+  <li>Confirm a maintenance window / low-activity period if the table is large or heavily used, since <code>ALTER INDEX REBUILD</code> with <code>PARALLEL</code> can be I/O and CPU intensive</li>
+  <li>Confirm the <code>GRANT ... FROM</code> typo (Section 3) has been corrected in <code>Initiate_and_Monitor.sql</code></li>
+</ul>
+</div>
+
+<div class="step">
+<h4>Step 1 &mdash; One-time setup (skip if already done)</h4>
+<pre><code>-- as IMS_MM or a user with CREATE TABLE / CREATE PROCEDURE on IMS_MM
+@Create_Mointor_Table.sql
+@INX_REBUILD_PROC.sql</code></pre>
+<p><strong>Verify:</strong></p>
+<pre><code>SELECT object_name, status FROM user_objects
+WHERE object_name IN ('INDEX_REBUILD_STATUS','REBUILD_INDEXES');</code></pre>
+<p>Expect <code>STATUS = VALID</code> for both. If <code>REBUILD_INDEXES</code> shows
+<code>INVALID</code>, see Section 7 for <code>ORA-00942</code> handling before continuing.</p>
+</div>
+
+<div class="step">
+<h4>Step 2 &mdash; Capture the BEFORE status</h4>
+<pre><code>@Pre_requesties.sql</code></pre>
+<p>This spools <code>IMS_MM_MYMT_OUT_REPOSITORY_INDEX_STATUS.html</code>. Rename it to
+something like <code>status_BEFORE_&lt;date&gt;.html</code> so it is not overwritten by Step 5.
+Note the <code>OVERALL_UNUSABLE_COUNT_IDX</code> value &mdash; this is what Step 4 should reduce
+to zero (excluding known <code>SYS_IL...$$</code> cases, see Section 6).</p>
+</div>
+
+<div class="step">
+<h4>Step 3 &mdash; Grant temporary access</h4>
+<pre><code>-- as SYSDBA
+GRANT SELECT ON DBA_INDEXES TO IMS_MM;
+GRANT SELECT ON DBA_IND_PARTITIONS TO IMS_MM;
+GRANT SELECT ON DBA_IND_SUBPARTITIONS TO IMS_MM;</code></pre>
+</div>
+
+<div class="step">
+<h4>Step 4 &mdash; Run the rebuild</h4>
+<pre><code>SET SERVEROUTPUT ON SIZE UNLIMITED;
+EXEC IMS_MM.rebuild_indexes(p_owner => 'IMS_MM', p_table => 'MYMT_OUT_REPOSITORY');</code></pre>
+<p>Watch the <code>DBMS_OUTPUT</code> stream for <span class="tag">SKIP</span> / <code>RUN</code> /
+<code>OK</code> / <code>FAIL</code> lines. A <code>FAIL</code> line does not stop the run &mdash;
+it will continue through the remaining objects.</p>
+</div>
+
+<div class="step">
+<h4>Step 5 &mdash; Revoke temporary access</h4>
+<pre><code>-- as SYSDBA
+REVOKE SELECT ON DBA_INDEXES FROM IMS_MM;
+REVOKE SELECT ON DBA_IND_PARTITIONS FROM IMS_MM;
+REVOKE SELECT ON DBA_IND_SUBPARTITIONS FROM IMS_MM;</code></pre>
+</div>
+
+<div class="step">
+<h4>Step 6 &mdash; Review results in index_rebuild_status</h4>
+<pre><code>SELECT index_name, index_kind, partition_name, subpartition_name,
+       status, start_time, end_time, error_message
+FROM IMS_MM.index_rebuild_status
+WHERE owner = 'IMS_MM' AND table_name = 'MYMT_OUT_REPOSITORY'
+ORDER BY status, index_name;</code></pre>
+<ul class="chk">
+  <li>All rows <code>SUCCESS</code>? &mdash; run is complete.</li>
+  <li>Any <code>FAILED</code> with <code>ORA-02327</code> and index name starting <code>SYS_IL</code>? &mdash; expected, see Section 6, no action via this utility.</li>
+  <li>Any other <code>FAILED</code>? &mdash; read <code>error_message</code>, resolve the underlying issue (tablespace space, locks, etc.), then simply rerun Step 4 &mdash; only the failed objects will be retried.</li>
+</ul>
+</div>
+
+<div class="step">
+<h4>Step 7 &mdash; Capture the AFTER status</h4>
+<pre><code>@Pre_requesties.sql</code></pre>
+<p>Rename the spooled file to <code>status_AFTER_&lt;date&gt;.html</code>. Compare
+<code>OVERALL_UNUSABLE_COUNT_IDX</code> against Step 2's value.</p>
+</div>
+
+<div class="step">
+<h4>Step 8 &mdash; Close out</h4>
+<ul class="chk">
+  <li>Confirm SYSDBA grants were revoked (Step 5)</li>
+  <li>Attach or store the BEFORE/AFTER HTML reports with the change record</li>
+  <li>If any non-<code>SYS_IL</code> objects remain <code>FAILED</code>, log a follow-up item with the captured <code>error_message</code></li>
+</ul>
+</div>
+
+<h2 id="faq">9. FAQ</h2>
+<p><strong>Is it safe to run <code>rebuild_indexes</code> more than once?</strong><br>
+Yes. Anything already <code>SUCCESS</code> is skipped. Anything <code>FAILED</code> is retried.
+Anything newly <code>UNUSABLE</code> since the last run is picked up.</p>
+<p><strong>Does it touch table data or move partitions?</strong><br>
+No. It only issues <code>ALTER INDEX ... REBUILD [PARTITION|SUBPARTITION]</code>. No
+<code>MOVE</code> statements, no data reorganization.</p>
+<p><strong>What if I only want to see what's broken, without fixing it yet?</strong><br>
+Run <code>Pre_requesties.sql</code> on its own &mdash; it is read-only.</p>
+<p><strong>Why does a healthy table produce zero log rows?</strong><br>
+Because nothing was <code>UNUSABLE</code> at the time &mdash; this is correct behavior, not a
+failure of the procedure.</p>
+
+</body>
+</html>
